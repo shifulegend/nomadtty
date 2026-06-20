@@ -180,7 +180,6 @@
       vvTimer = setTimeout(updateLayout, 150);
     }
     window.visualViewport.addEventListener('resize', onVVChange);
-    window.visualViewport.addEventListener('scroll', onVVChange);
   }
 
   /* ── ResizeObserver on terminal container for belt-and-suspenders ── */
