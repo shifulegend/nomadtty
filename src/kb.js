@@ -81,9 +81,32 @@
 
   window.KP = function (e) {
     e.preventDefault();
+    /* HTTPS: use clipboard API directly */
     if (navigator.clipboard && navigator.clipboard.readText) {
       navigator.clipboard.readText().then(function (text) { send(text); });
+      return;
     }
+    /* HTTP fallback: show a visible textarea so iOS native paste menu works */
+    var ov = document.createElement('textarea');
+    ov.style.cssText = 'position:fixed;top:50%;left:50%;' +
+      'transform:translate(-50%,-50%);width:220px;height:70px;z-index:999999;' +
+      'font-size:16px;background:#1e1e1e;color:#ccc;' +
+      'border:2px solid #0077ff;border-radius:8px;padding:8px;' +
+      '-webkit-user-select:auto;user-select:auto;';
+    ov.placeholder = 'Long-press here → Paste';
+    document.body.appendChild(ov);
+    ov.focus();
+    ov.addEventListener('paste', function (ev) {
+      var text = (ev.clipboardData || window.clipboardData).getData('text');
+      if (text) send(text);
+      document.body.removeChild(ov);
+    });
+    /* close overlay if user taps away without pasting */
+    ov.addEventListener('blur', function () {
+      setTimeout(function () {
+        if (document.body.contains(ov)) document.body.removeChild(ov);
+      }, 300);
+    });
   };
 
   window.TFN = function (e) {
@@ -146,13 +169,15 @@
     window.dispatchEvent(new Event('resize'));
   }
 
-  /* ── visualViewport: refit when mobile keyboard shows/hides or page scrolls ── */
+  /* ── visualViewport: refit when mobile keyboard shows/hides ── */
   if (window.visualViewport) {
+    var vvTimer;
     function onVVChange() {
-      /* iOS Safari scrolls the layout viewport when a textarea is focused,
-         even with overflow:hidden on body. Reset it before measuring. */
-      window.scrollTo(0, 0);
-      updateLayout();
+      /* Debounce: visualViewport.resize fires on every tiny keyboard
+         adjustment during typing. Only refit after it settles (150 ms)
+         so we don't fire fitAddon or dispatch resize mid-keystroke. */
+      clearTimeout(vvTimer);
+      vvTimer = setTimeout(updateLayout, 150);
     }
     window.visualViewport.addEventListener('resize', onVVChange);
     window.visualViewport.addEventListener('scroll', onVVChange);
