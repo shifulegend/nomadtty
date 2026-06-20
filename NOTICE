@@ -1,0 +1,62 @@
+NomadTTY
+========
+Copyright (c) 2026 shifulegend
+
+This product includes software from third parties under the following licenses:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ttyd — Web-based terminal emulator
+Copyright (c) 2016-2024 Shuanglei Tao <tsl0922@gmail.com>
+https://github.com/tsl0922/ttyd
+License: MIT
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+xterm.js — Terminal front-end (bundled inside ttyd)
+Copyright (c) 2017-2024 The xterm.js authors
+Copyright (c) 2012-2013 Christopher Jeffrey
+https://github.com/xtermjs/xterm.js
+License: MIT
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+tmux — Terminal multiplexer
+Copyright (c) 2007 Nicholas Marriott <nicholas.marriott@gmail.com>
+https://github.com/tmux/tmux
+License: ISC
+
+Permission to use, copy, modify, and distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+nginx — HTTP and reverse proxy server
+Copyright (c) 2002-2024 Igor Sysoev
+Copyright (c) 2011-2024 Nginx, Inc.
+https://nginx.org
+License: BSD 2-Clause
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+1. Redistributions of source code must retain the above copyright notice,
+   this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+dnsmasq — Lightweight DNS forwarder (optional; not bundled, install separately)
+Copyright (c) 2000-2024 Simon Kelley
+http://www.thekelleys.org.uk/dnsmasq/
+License: GNU GPL v2 or later — https://www.gnu.org/licenses/gpl-2.0.html

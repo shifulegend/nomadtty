@@ -1,0 +1,17 @@
+version: "3.9"
+services:
+  nomadtty:
+    build: .
+    image: nomadtty:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    environment:
+      # Optional: set your domain so the nginx server_name matches
+      - NOMADTTY_HOST=terminal.yourdomain.com
+    # Uncomment to persist the tmux session across container restarts:
+    # volumes:
+    #   - nomadtty-home:/root
+
+# volumes:
+#   nomadtty-home:

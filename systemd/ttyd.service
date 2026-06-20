@@ -1,0 +1,22 @@
+# NomadTTY — systemd service for ttyd
+# Starts ttyd on localhost:47821 with persistent tmux session.
+# Copy to /etc/systemd/system/ttyd.service then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ttyd
+
+[Unit]
+Description=NomadTTY — ttyd web terminal
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/ttyd \
+    --port 47821 \
+    --interface 127.0.0.1 \
+    --writable \
+    tmux new-session -A -s main
+Restart=always
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target
