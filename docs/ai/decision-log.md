@@ -15,6 +15,21 @@
 
 ---
 
+### [2026-06-20] Run ttyd as deploy user (ubuntu), not root
+- **Context**: ttyd systemd service was set to `User=root`. This caused `claude` (and
+  any other user-local CLI tool) to be unavailable in the web terminal because root's
+  `$PATH` does not include `/home/ubuntu/.local/bin/`, and credentials live in
+  `/home/ubuntu/.claude/` which root cannot access.
+- **Decision**: `User=ubuntu` in `systemd/ttyd.service`.
+- **Alternatives considered**: Symlinking claude to `/usr/local/bin/` — rejected because
+  it still fails on credential lookup (`~/.claude/` resolves to `/root/.claude/`).
+- **Rationale**: PTY creation does not require root on Linux. Normal users can open
+  `/dev/ptmx`. Running as the deploy user gives the terminal the correct `$PATH` and
+  home directory.
+- **Consequences**: Deploy instructions must ensure the service `User` matches the user
+  who has `claude` (and other tools) installed.
+- **Owner**: ankit
+
 ### [2026-06-20] Toolbar positioned at top of page, not bottom
 - **Context**: Initial toolbar was at the bottom; user feedback requested top placement.
 - **Decision**: Toolbar is `position: fixed; top: 0`. Terminal container is pushed down

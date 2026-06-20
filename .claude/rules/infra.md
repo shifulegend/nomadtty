@@ -23,7 +23,9 @@
 
 ## systemd rules
 - `--writable` is mandatory in ttyd ExecStart. Never remove it.
-- `User=root` is required for PTY creation. Document this explicitly.
+- `User=ubuntu` (or the deploy user) — NOT root. PTY creation works fine as a normal
+  user; root is not required. Running as root breaks `claude` and other user-local tools
+  because their binaries and credentials live under the user home, not /root.
 - Multi-command ExecStart* logic must be wrapped in `/bin/sh -c '...'`.
 - `Restart=always; RestartSec=3` gives process resilience.
 - Run `systemctl daemon-reload` immediately after editing any unit file.

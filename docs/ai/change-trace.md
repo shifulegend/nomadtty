@@ -17,6 +17,17 @@
 
 ---
 
+### [2026-06-20] ttyd service changed from User=root to User=ubuntu
+- **Timestamp**: 2026-06-20 06:33 UTC
+- **Change**: `systemd/ttyd.service` `User=root` → `User=ubuntu`; applied to live
+  `/etc/systemd/system/ttyd.service`; service restarted.
+- **Rationale**: Root's `$PATH` lacks `/home/ubuntu/.local/bin/`, so `claude` was not
+  found in NomadTTY sessions. Root also cannot access `/home/ubuntu/.claude/` credentials.
+- **Affected areas**: `systemd/ttyd.service`, `.claude/rules/infra.md`,
+  `docs/ai/decision-log.md`
+- **Related commit**: pending
+- **Related decisions**: [2026-06-20] Run ttyd as deploy user (ubuntu), not root
+
 ### [2026-06-20] Cross-tool AI development system added
 - **Timestamp**: 2026-06-20 06:10 UTC
 - **Change**: Added `docs/ai/**` shared canonical docs, `.claude/**` Claude Code adapter,

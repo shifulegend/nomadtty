@@ -89,5 +89,8 @@ A task is done when:
   `sed`. TODO: add regex validation in `install.sh`.
 - The inline WS hook script in `sub_filter` must not grow beyond ≈300 B minified.
   Exceeding nginx's sub_filter parameter limit (≈4 KB) causes silent injection failure.
-- Docker image: `User=root` is needed because ttyd requires PTY creation privileges.
-  This is documented and accepted. Do not add a non-root user without testing PTY creation.
+- **systemd service**: run as the deploy user (`User=ubuntu`), not root. PTY creation
+  does not require root on Linux. Running as root breaks user-local CLIs (e.g. `claude`)
+  because `$PATH` and credential dirs (e.g. `~/.claude/`) are relative to the wrong home.
+- Docker image: ttyd runs as root inside the container (no host user available). This
+  is acceptable because the container is isolated and the risk is contained.
