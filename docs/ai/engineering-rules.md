@@ -78,6 +78,17 @@ A task is done when:
 - [ ] Tool-specific adapter files are synchronized (see `docs/ai/tool-sync-policy.md`).
 - [ ] A commit checkpoint is proposed or executed.
 
+## Branching, PR, and Release Hygiene
+- **Never push directly to `main`.** All changes must go via a branch and a pull request.
+- Branch names: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`.
+- PRs must use `.github/PULL_REQUEST_TEMPLATE.md`. All checklist items must be addressed.
+- CI must pass (`shellcheck` + `docker build`) before merging.
+- Releases are tagged: `v<major>.<minor>.<patch>`. Tag from `main` after merge.
+- The `CODEOWNERS` file routes all PR reviews to `@shifulegend`.
+- Community health files (`CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`,
+  `SUPPORT.md`) are living documents. Update them when contribution rules or
+  security posture changes, exactly as you would update `docs/ai/**`.
+
 ## Security / Safety Constraints
 - ttyd **must** listen on `127.0.0.1` only, never `0.0.0.0`. Network exposure
   is nginx's responsibility. This prevents direct unauthenticated PTY access.

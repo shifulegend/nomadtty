@@ -23,6 +23,9 @@ bash, nginx config, Docker, systemd.
 - `window._S.send('0' + bytes)` is how kb.js sends PTY input.
 - Run `nginx -t` before every reload.
 - Never use `sed s///` on nginx lines containing JS or URLs.
+- Never push directly to `main`. All changes via branches and PRs.
+- CI must pass (shellcheck + docker build) before merging.
+- Keep `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `SUPPORT.md` current.
 
 ## Scoped instruction files — read what is relevant
 - `.github/instructions/core.instructions.md` — modularity, code organisation

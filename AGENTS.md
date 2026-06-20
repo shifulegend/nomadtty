@@ -22,6 +22,10 @@ Persistent tmux sessions. Vanilla JS, no bundler, no dependencies.
 6. Never `sed s///` to edit nginx lines with JS or URLs.
 7. `set -euo pipefail` in all shell scripts.
 8. `docs/ai/**` is the canonical source of truth. Update it first.
+9. Never push directly to `main`. All changes via branches and PRs.
+10. CI must pass (shellcheck + docker build) before merging.
+11. Community health files (`CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`,
+    `SUPPORT.md`) are part of the repo and must be kept current.
 
 ## Canonical docs (read before every task)
 - `docs/ai/project-overview.md` — architecture, stack, terminology

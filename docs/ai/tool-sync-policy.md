@@ -29,6 +29,16 @@ Do not let durable knowledge live only inside one tool's native files.
 | `docs/ai/commit-log-guidance.md` | Commit message format and granularity rules |
 | `docs/ai/tool-sync-policy.md` | This file — sync rules |
 
+### Community health files (keep current with engineering-rules.md)
+| File | Content |
+|------|---------|
+| `CONTRIBUTING.md` | Contribution workflow, AI-agent rules, coding standards |
+| `SECURITY.md` | Security model, supported versions, disclosure process |
+| `CODE_OF_CONDUCT.md` | Community behaviour standards |
+| `SUPPORT.md` | How to get help, support model |
+| `.github/CODEOWNERS` | Review routing — update if ownership changes |
+| `.github/workflows/ci.yml` | CI jobs — update when new lint/test targets are added |
+
 ### Adapter files (must not drift from canonical)
 | File | Tool | Update trigger |
 |------|------|---------------|

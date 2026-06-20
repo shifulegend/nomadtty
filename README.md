@@ -1,5 +1,8 @@
 # NomadTTY
 
+[![CI](https://github.com/shifulegend/nomadtty/actions/workflows/ci.yml/badge.svg)](https://github.com/shifulegend/nomadtty/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 **A mobile-friendly web terminal you can access from anywhere.**
 
 NomadTTY wraps [ttyd](https://github.com/tsl0922/ttyd) with a purpose-built mobile keyboard toolbar — giving you ESC, TAB, arrow keys, modifier keys (Ctrl/Shift/Alt), F1–F12, and more, all from a phone or tablet browser. Sessions are persistent via [tmux](https://github.com/tmux/tmux), so closing your browser never kills your work.
@@ -159,3 +162,9 @@ tailscale serve --bg http://localhost:80
 NomadTTY itself is MIT licensed. See [LICENSE](LICENSE).
 
 Third-party components (ttyd, xterm.js, tmux, nginx) are credited in [NOTICE](NOTICE).
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Security issues go through [SECURITY.md](SECURITY.md). For help, see [SUPPORT.md](SUPPORT.md).

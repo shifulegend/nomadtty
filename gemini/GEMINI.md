@@ -25,6 +25,9 @@ Stack: vanilla JS · bash · nginx config · Docker · systemd.
 - `window._S.send('0' + bytes)` is how kb.js sends PTY input.
 - `nginx -t` before every reload.
 - Never `sed s///` on lines containing JS or URLs. (mistakes.md [2026-06-20-006])
+- Never push directly to `main`. All changes via branches and PRs.
+- CI must pass (shellcheck + docker build) before merging.
+- Keep `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `SUPPORT.md` current.
 
 ## Key files
 | File | Role |
