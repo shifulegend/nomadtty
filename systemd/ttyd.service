@@ -16,7 +16,7 @@ ExecStart=/usr/bin/ttyd \
     tmux new-session -A -s main
 Restart=always
 RestartSec=3
-User=ubuntu
+User=NOMADTTY_USER
 
 [Install]
 WantedBy=multi-user.target

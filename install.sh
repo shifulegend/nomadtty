@@ -7,12 +7,17 @@ set -euo pipefail
 
 TTYD_PORT="${TTYD_PORT:-47821}"
 NOMADTTY_HOST="${NOMADTTY_HOST:-}"
+# User that will own the ttyd process. Must be the user whose $PATH and ~/
+# contain the tools you want available in the terminal (e.g. claude, node).
+# Defaults to the user who invoked sudo, or the current user if not via sudo.
+NOMADTTY_USER="${NOMADTTY_USER:-${SUDO_USER:-$(id -un)}}"
 WEB_ROOT="/var/www/nomadtty"
 NGINX_CONF="/etc/nginx/sites-available/nomadtty"
 SERVICE_FILE="/etc/systemd/system/ttyd.service"
 REPO="https://raw.githubusercontent.com/shifulegend/nomadtty/main"
 
 echo "==> NomadTTY installer"
+echo "    Service user : $NOMADTTY_USER  (override with NOMADTTY_USER=<user>)"
 
 # Require root
 if [ "$(id -u)" -ne 0 ]; then
@@ -43,6 +48,7 @@ rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
 # Install systemd service
 curl -fsSL "$REPO/systemd/ttyd.service" -o "$SERVICE_FILE"
 sed -i "s/47821/$TTYD_PORT/g" "$SERVICE_FILE"
+sed -i "s/NOMADTTY_USER/$NOMADTTY_USER/g" "$SERVICE_FILE"
 
 systemctl daemon-reload
 systemctl enable --now ttyd
