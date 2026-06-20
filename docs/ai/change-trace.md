@@ -17,6 +17,34 @@
 
 ---
 
+### [2026-06-20] Fix mobile keyboard overlap — iOS Safari (v2, explicit height)
+- **Timestamp**: 2026-06-20 07:05 UTC
+- **Change**: Rewrote `updateLayout()` in `src/kb.js`:
+  (1) Use `visualViewport.height` for explicit `height` instead of `bottom` — iOS Safari's
+  `position:fixed + bottom:X` is unreliable when the keyboard is open.
+  (2) Replace `cssText +=` with `cssText =` (full replace) to prevent duplicate property
+  accumulation confusing Safari's style engine.
+  (3) Add `window.scrollTo(0,0)` in `visualViewport` listener to reset iOS layout-viewport
+  scroll that occurs when a textarea is focused even with `overflow:hidden` on body.
+- **Rationale**: First fix (bottom calculation) was correct for Android but still broken
+  on iOS Safari due to position:fixed/bottom behavior and cssText accumulation.
+- **Affected areas**: `src/kb.js`
+- **Related decisions**: [2026-06-20] Responsive layout via visualViewport + dvh + touch-action
+
+### [2026-06-20] Fix mobile keyboard overlapping terminal cursor (iOS + all tablets)
+- **Timestamp**: 2026-06-20 06:55 UTC
+- **Change**: `updateLayout()` in `src/kb.js` now computes keyboard intrusion height via
+  `visualViewport` and passes it as `bottom` on `#terminal-container` instead of
+  hardcoding `bottom:0`. Added `visualViewport.scroll` listener alongside the existing
+  `resize` listener to catch iOS visual-viewport vertical shifts.
+- **Rationale**: On iOS/iPad Safari the layout viewport never shrinks when the on-screen
+  keyboard opens; only `visualViewport.height` shrinks. Hardcoded `bottom:0` let the
+  terminal extend behind the keyboard, hiding the cursor. Android with
+  `interactive-widget=resizes-content` already shrinks `window.innerHeight`, so
+  `keyboardH` evaluates to 0 there — no double-correction.
+- **Affected areas**: `src/kb.js`
+- **Related decisions**: [2026-06-20] Responsive layout via visualViewport + dvh + touch-action
+
 ### [2026-06-20] ttyd service changed from User=root to User=ubuntu
 - **Timestamp**: 2026-06-20 06:33 UTC
 - **Change**: `systemd/ttyd.service` `User=root` → `User=ubuntu`; applied to live

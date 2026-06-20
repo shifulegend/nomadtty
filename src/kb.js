@@ -79,6 +79,13 @@
     setMod(k, !M[k]);
   };
 
+  window.KP = function (e) {
+    e.preventDefault();
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      navigator.clipboard.readText().then(function (text) { send(text); });
+    }
+  };
+
   window.TFN = function (e) {
     e.preventDefault();
     fnOpen = !fnOpen;
@@ -116,26 +123,39 @@
     }
   }, true);
 
-  /* ── Layout: keep terminal container below toolbar ── */
+  /* ── Layout: keep terminal container below toolbar and above keyboard ── */
   function updateLayout() {
     var kb = document.getElementById('kb');
     var tc = document.getElementById('terminal-container');
     if (!kb) return;
-    var h = kb.getBoundingClientRect().height;
+    var toolbarH = kb.getBoundingClientRect().height;
+    /* Use visualViewport.height (shrinks on iOS when keyboard opens) rather
+       than window.innerHeight (doesn't shrink on iOS). Setting an explicit
+       height — not bottom — is the only reliable approach on iOS Safari:
+       position:fixed + bottom:X is broken when the keyboard is open. */
+    var vvh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    var termH = Math.max(100, vvh - toolbarH);
     if (tc) {
-      tc.style.cssText += ';position:fixed!important;top:' + h + 'px!important;' +
-        'left:0!important;right:0!important;bottom:0!important;' +
-        'width:auto!important;height:auto!important;margin:0!important;';
+      /* Replace cssText entirely (not +=) to avoid duplicate declarations
+         accumulating across calls, which confuses Safari's style engine. */
+      tc.style.cssText = 'position:fixed!important;top:' + toolbarH + 'px!important;' +
+        'left:0!important;right:0!important;bottom:auto!important;' +
+        'width:100%!important;height:' + termH + 'px!important;margin:0!important;';
     }
     /* fire resize so ttyd's fitAddon recalculates cols/rows */
     window.dispatchEvent(new Event('resize'));
   }
 
-  /* ── visualViewport: refit when mobile keyboard shows/hides ── */
+  /* ── visualViewport: refit when mobile keyboard shows/hides or page scrolls ── */
   if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', function () {
+    function onVVChange() {
+      /* iOS Safari scrolls the layout viewport when a textarea is focused,
+         even with overflow:hidden on body. Reset it before measuring. */
+      window.scrollTo(0, 0);
       updateLayout();
-    });
+    }
+    window.visualViewport.addEventListener('resize', onVVChange);
+    window.visualViewport.addEventListener('scroll', onVVChange);
   }
 
   /* ── ResizeObserver on terminal container for belt-and-suspenders ── */
@@ -175,6 +195,8 @@
     btn('PGDN',      "KN('PGDN',event)"),
     btn('INS',       "KN('INS',event)"),
     btn('DEL',       "KN('DEL',event)"),
+    '<span class="sep"></span>',
+    btn('Paste',     "KP(event)"),
     '<span class="sep"></span>',
     btn('Fn',        "TFN(event)", 'kb-fn'),
     btn('A&minus;',  "KZ(-1,event)"),
