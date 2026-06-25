@@ -63,17 +63,80 @@ your work.
 
 ---
 
-## Quick Install (Debian / Ubuntu)
+## Quick Install (Debian / Ubuntu) — one command
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/shifulegend/nomadtty/main/install.sh | sudo bash
 ```
 
-With a custom domain:
+The installer automatically:
+1. Installs `ttyd`, `tmux`, `nginx`, `curl` via apt
+2. Downloads `kb.js` to `/var/www/nomadtty/`
+3. Installs and enables the nginx vhost (port 80)
+4. Installs and starts the `ttyd` systemd service (persists across reboots)
+5. Runs a health check — prints `HTTP 200 OK` if everything is working
+6. Prints the URL to open in your browser
+
+At the end you will see:
+
+```
+✓  NomadTTY installed and running.
+
+   Open:  http://192.168.1.x
+```
+
+### Configuration options
+
+All options are env vars — no config file to edit:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NOMADTTY_HOST` | _(any)_ | Set your domain as nginx `server_name`, e.g. `terminal.example.com` |
+| `TTYD_PORT` | `47821` | Internal ttyd listen port (loopback only, not publicly exposed) |
+| `NOMADTTY_USER` | current sudo user | OS user that runs ttyd — must own the tools you want available in the shell |
+
+**With a custom domain:**
 
 ```bash
-NOMADTTY_HOST=terminal.example.com sudo -E bash -c \
-  'curl -fsSL https://raw.githubusercontent.com/shifulegend/nomadtty/main/install.sh | bash'
+curl -fsSL https://raw.githubusercontent.com/shifulegend/nomadtty/main/install.sh \
+  | sudo NOMADTTY_HOST=terminal.example.com bash
+```
+
+**With a custom port and user:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/shifulegend/nomadtty/main/install.sh \
+  | sudo TTYD_PORT=9000 NOMADTTY_USER=ubuntu bash
+```
+
+### Uninstall
+
+The installer prints exact uninstall commands at the end. In short:
+
+```bash
+sudo systemctl disable --now ttyd
+sudo rm -f /etc/systemd/system/ttyd.service \
+           /etc/nginx/sites-available/nomadtty \
+           /etc/nginx/sites-enabled/nomadtty
+sudo rm -rf /var/www/nomadtty
+sudo systemctl daemon-reload && sudo systemctl reload nginx
+```
+
+### Troubleshoot
+
+```bash
+# Is ttyd running?
+systemctl status ttyd
+
+# Is nginx config valid?
+sudo nginx -t
+
+# Live logs
+journalctl -u ttyd -f
+tail -f /var/log/nginx/nomadtty.access.log
+
+# Is the toolbar being injected?
+curl -s http://localhost/ | grep 'kb.js'
 ```
 
 ---

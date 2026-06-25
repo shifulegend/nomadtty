@@ -17,6 +17,36 @@
 
 ---
 
+### [2026-06-25] install.sh — hostname validation + health check + uninstall instructions
+- **Timestamp**: 2026-06-25 12:10 UTC
+- **Change**:
+  - Added `NOMADTTY_HOST` regex validation (hostname chars only) before sed injection
+    — resolves the TODO in `.claude/rules/config.md`.
+  - Added post-install health check: `curl` hits `http://127.0.0.1/` and prints
+    `HTTP 200 OK` or a warning with log pointers.
+  - Added step-by-step echo progress (`==> Installing...`, `==> Configuring...`).
+  - Added inline uninstall instructions in the success output.
+  - README install section expanded: config options table, env var examples, uninstall
+    commands, troubleshoot commands, what the installer does step-by-step.
+- **Rationale**: Users reported confusion about what the installer does and how to
+  reconfigure after initial install. "1-step for anyone" requires clear feedback.
+- **Affected areas**: `install.sh`, `README.md`
+- **Related commit**: pending
+- **Related decisions**: none new
+
+### [2026-06-25] Demo assets — Playwright screenshots and GIFs
+- **Timestamp**: 2026-06-25 12:05 UTC
+- **Change**: Added 6 visual assets to `docs/assets/`:
+  - `demo-mobile.gif` (441 KB) — iPhone 14 viewport, shows CTRL + Fn row
+  - `demo-desktop.gif` (4.9 MB, 960px) — desktop 11s walkthrough
+  - `screenshot-desktop.png`, `screenshot-iphone14.png`, `screenshot-pixel7.png`
+  - `screenshot-toolbar-fn.png` — CTRL (blue) + F1-F12 row expanded
+  - Capture scripts in `scripts/capture-demo.mjs` and `capture-demo2.mjs`
+  - README.md: added Demo section with GIF + side-by-side device table
+- **Rationale**: README needed visual proof of the mobile-first UX for new visitors.
+- **Affected areas**: `docs/assets/`, `scripts/`, `README.md`, `.gitignore`
+- **Related commit**: 9dd0701
+
 ### [2026-06-25] Repository enhancement — Dependabot, CODEOWNERS, README overhaul, SECURITY
 - **Timestamp**: 2026-06-25 00:00 UTC
 - **Change**:
