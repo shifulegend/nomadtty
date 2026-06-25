@@ -284,6 +284,18 @@
     '#terminal-container{-webkit-user-select:none;}',
     /* do NOT block the hidden textarea — it captures keyboard input */
     '#terminal-container .xterm-helper-textarea{pointer-events:auto!important;}',
+
+    /* ── Scroll fixes ── */
+    /* ttyd+tmux bug (#636): xterm-viewport loses overflow-y:scroll — force it back.
+       Without this, desktop mouse wheel and touch scroll both silently fail.
+       Hide the scrollbar visually (scrollbar-width:none + webkit) so it doesn't
+       eat into terminal width, while keeping overflow-y:scroll so xterm.js can
+       still use scrollTop to track position. */
+    '.xterm-viewport{overflow-y:scroll!important;overscroll-behavior:none;',
+      'scrollbar-width:none;}',
+    '.xterm-viewport::-webkit-scrollbar{display:none;}',
+    /* Canvas blocks touch; we handle touch ourselves below */
+    '.xterm-screen{touch-action:none!important;}',
   ].join('');
 
   var style = document.createElement('style');
@@ -302,4 +314,46 @@
   setTimeout(updateLayout, 600);
   setTimeout(function () { updateLayout(); watchTerminalContainer(); }, 1500);
   window.addEventListener('resize', updateLayout);
+
+  /* ── Touch scroll: finger swipe → xterm.js wheel events ──
+     xterm.js has no built-in touch scroll (issue #5377). The canvas captures
+     all touch events but ignores vertical swipes. We intercept touchmove on
+     .xterm and dispatch a synthetic WheelEvent on .xterm-viewport, which is
+     the element xterm.js's own wheel handler already listens to. Works on
+     iOS Safari, Chrome Android, and iPad. */
+  function initTouchScroll() {
+    var xterm = document.querySelector('.xterm');
+    var vp    = document.querySelector('.xterm-viewport');
+    if (!xterm || !vp) { setTimeout(initTouchScroll, 400); return; }
+
+    var lastY = 0;
+
+    xterm.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) return;
+      lastY = e.touches[0].clientY;
+    }, { passive: true });
+
+    xterm.addEventListener('touchmove', function (e) {
+      if (e.touches.length !== 1) return;
+      e.preventDefault();             /* suppress iOS page-bounce */
+      var y     = e.touches[0].clientY;
+      var delta = (lastY - y) * 3;   /* px delta; ×3 for comfortable sensitivity */
+      lastY = y;
+      /* Dispatch on .xterm (outer element) so xterm.js mouse-reporting mode
+         picks it up and forwards to tmux as scroll sequences. Bubbles:true
+         means a dispatch on vp also reaches this listener, but targeting
+         xterm directly is more reliable across xterm.js versions. */
+      xterm.dispatchEvent(new WheelEvent('wheel', {
+        deltaY:    delta,
+        deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+        bubbles:   true,
+        cancelable: true,
+      }));
+    }, { passive: false });           /* passive:false required to call preventDefault */
+
+    xterm.addEventListener('touchend', function () {
+      lastY = 0;
+    }, { passive: true });
+  }
+  setTimeout(initTouchScroll, 800);
 })();
