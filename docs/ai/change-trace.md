@@ -17,6 +17,27 @@
 
 ---
 
+### [2026-06-25] Repository enhancement — Dependabot, CODEOWNERS, README overhaul, SECURITY
+- **Timestamp**: 2026-06-25 00:00 UTC
+- **Change**:
+  - Added `.github/dependabot.yml` — weekly Docker and GitHub Actions CVE scanning.
+  - Enhanced `.github/CODEOWNERS` — component-specific ownership routing for nginx,
+    systemd, kb.js, Dockerfile, install.sh, SECURITY.md, and docs/ai/.
+  - Overhauled `README.md` — Mermaid architecture diagram, VirtualKeyBar section with
+    actual JS code snippet from kb.js, Security Posture table, reference-style links,
+    expanded Tailscale section, all fenced blocks with language tags.
+  - Enhanced `SECURITY.md` — added Dependabot section, expanded hardening table with
+    priority ratings and rate-limiting recommendation.
+  - Added `docs/ai/decision-log.md` entries for Mermaid diagram and Dependabot decisions.
+- **Rationale**: Strategic promotion blueprint analysis identified gaps vs. leading
+  terminal repositories: missing automated dependency scanning, weak CODEOWNERS routing,
+  no visual architecture diagram, missing VirtualKeyBar documentation, and no security
+  posture summary in README.
+- **Affected areas**: `.github/dependabot.yml`, `.github/CODEOWNERS`, `README.md`,
+  `SECURITY.md`, `docs/ai/decision-log.md`, `docs/ai/change-trace.md`
+- **Related commit**: pending
+- **Related decisions**: [2026-06-25] Mermaid diagram, [2026-06-25] Dependabot
+
 ### [2026-06-20] Fix mobile keyboard overlap — iOS Safari (v2, explicit height)
 - **Timestamp**: 2026-06-20 07:05 UTC
 - **Change**: Rewrote `updateLayout()` in `src/kb.js`:

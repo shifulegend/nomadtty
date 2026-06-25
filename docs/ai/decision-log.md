@@ -15,6 +15,30 @@
 
 ---
 
+### [2026-06-25] Add Mermaid architecture diagram to README
+- **Context**: README had an ASCII art architecture diagram. Mermaid is rendered natively
+  by GitHub, giving a visually richer diagram with no external tooling.
+- **Decision**: Replace ASCII diagram with a Mermaid `graph LR` block. Keep the ASCII
+  version in `docs/ai/project-overview.md` as a plain-text fallback.
+- **Alternatives considered**: Keep ASCII (universally readable in any tool); Mermaid only.
+- **Rationale**: GitHub renders Mermaid inline. The diagram is the most effective way to
+  communicate the sub_filter injection chain and WebSocket hook to new contributors.
+- **Consequences**: The diagram must be updated in README.md whenever the architecture
+  changes (e.g. new proxy, new port). ASCII copy in project-overview.md is the fallback.
+- **Owner**: ankit
+
+### [2026-06-25] Add Dependabot for Docker and GitHub Actions
+- **Context**: No automated dependency scanning existed. Docker base image and GitHub
+  Actions versions could silently drift.
+- **Decision**: Add `.github/dependabot.yml` scanning `docker` and `github-actions`
+  ecosystems on a weekly schedule.
+- **Alternatives considered**: Manual audits; Renovate Bot.
+- **Rationale**: Dependabot is zero-config, built into GitHub, and generates PRs
+  automatically. Weekly cadence avoids noise while catching security patches promptly.
+- **Consequences**: Expect periodic automated PRs for `ubuntu:24.04` base and actions
+  pins. Review them; do not auto-merge without checking.
+- **Owner**: ankit
+
 ### [2026-06-20] Run ttyd as deploy user (ubuntu), not root
 - **Context**: ttyd systemd service was set to `User=root`. This caused `claude` (and
   any other user-local CLI tool) to be unavailable in the web terminal because root's
