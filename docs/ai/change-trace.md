@@ -17,6 +17,22 @@
 
 ---
 
+### [2026-06-25] Real-device screenshots — iPhone 15 Pro Max (OCR-masked)
+- **Timestamp**: 2026-06-25 14:00 UTC
+- **Change**: Added 4 real-device screenshots to `docs/assets/`:
+  - `real-device-01-toolbar-claude-help.png` — full terminal view, toolbar and Claude Code `/help`
+  - `real-device-02-keyboard-open.png` — iOS software keyboard open, terminal above it
+  - `real-device-03-keyboard-appearing.png` — keyboard slide-in frame, toolbar fixed at top
+  - `real-device-04-claude-ai-output.png` — Claude Code AI response streamed in terminal
+  - All sensitive fields (session UUID, server IP/hostname, private URL, git branch name) redacted
+    using Tesseract 5 OCR-derived bounding boxes; zero-leakage verified with a second OCR pass.
+  - README.md: added "Real device — iPhone 15 Pro Max" section with 2×2 screenshot grid.
+- **Rationale**: Playwright device emulation shows viewport layout but not real iOS rendering.
+  Real-device shots prove the keyboard resize, toolbar, and layout behaviour on actual hardware.
+- **Affected areas**: `docs/assets/` (4 new PNGs), `README.md`
+- **Related commit**: pending
+- **Related decisions**: none new
+
 ### [2026-06-25] install.sh — hostname validation + health check + uninstall instructions
 - **Timestamp**: 2026-06-25 12:10 UTC
 - **Change**:
