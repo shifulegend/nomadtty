@@ -7,7 +7,7 @@
 # Run:
 #   docker run -d -p 80:80 --name nomadtty nomadtty
 
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 
