@@ -17,6 +17,73 @@
 
 ---
 
+### [2026-06-25] Real-device screenshots — iPhone 15 Pro Max (OCR-masked)
+- **Timestamp**: 2026-06-25 14:00 UTC
+- **Change**: Added 4 real-device screenshots to `docs/assets/`:
+  - `real-device-01-toolbar-claude-help.png` — full terminal view, toolbar and Claude Code `/help`
+  - `real-device-02-keyboard-open.png` — iOS software keyboard open, terminal above it
+  - `real-device-03-keyboard-appearing.png` — keyboard slide-in frame, toolbar fixed at top
+  - `real-device-04-claude-ai-output.png` — Claude Code AI response streamed in terminal
+  - All sensitive fields (session UUID, server IP/hostname, private URL, git branch name) redacted
+    using Tesseract 5 OCR-derived bounding boxes; zero-leakage verified with a second OCR pass.
+  - README.md: added "Real device — iPhone 15 Pro Max" section with 2×2 screenshot grid.
+- **Rationale**: Playwright device emulation shows viewport layout but not real iOS rendering.
+  Real-device shots prove the keyboard resize, toolbar, and layout behaviour on actual hardware.
+- **Affected areas**: `docs/assets/` (4 new PNGs), `README.md`
+- **Related commit**: pending
+- **Related decisions**: none new
+
+### [2026-06-25] install.sh — hostname validation + health check + uninstall instructions
+- **Timestamp**: 2026-06-25 12:10 UTC
+- **Change**:
+  - Added `NOMADTTY_HOST` regex validation (hostname chars only) before sed injection
+    — resolves the TODO in `.claude/rules/config.md`.
+  - Added post-install health check: `curl` hits `http://127.0.0.1/` and prints
+    `HTTP 200 OK` or a warning with log pointers.
+  - Added step-by-step echo progress (`==> Installing...`, `==> Configuring...`).
+  - Added inline uninstall instructions in the success output.
+  - README install section expanded: config options table, env var examples, uninstall
+    commands, troubleshoot commands, what the installer does step-by-step.
+- **Rationale**: Users reported confusion about what the installer does and how to
+  reconfigure after initial install. "1-step for anyone" requires clear feedback.
+- **Affected areas**: `install.sh`, `README.md`
+- **Related commit**: pending
+- **Related decisions**: none new
+
+### [2026-06-25] Demo assets — Playwright screenshots and GIFs
+- **Timestamp**: 2026-06-25 12:05 UTC
+- **Change**: Added 6 visual assets to `docs/assets/`:
+  - `demo-mobile.gif` (441 KB) — iPhone 14 viewport, shows CTRL + Fn row
+  - `demo-desktop.gif` (4.9 MB, 960px) — desktop 11s walkthrough
+  - `screenshot-desktop.png`, `screenshot-iphone14.png`, `screenshot-pixel7.png`
+  - `screenshot-toolbar-fn.png` — CTRL (blue) + F1-F12 row expanded
+  - Capture scripts in `scripts/capture-demo.mjs` and `capture-demo2.mjs`
+  - README.md: added Demo section with GIF + side-by-side device table
+- **Rationale**: README needed visual proof of the mobile-first UX for new visitors.
+- **Affected areas**: `docs/assets/`, `scripts/`, `README.md`, `.gitignore`
+- **Related commit**: 9dd0701
+
+### [2026-06-25] Repository enhancement — Dependabot, CODEOWNERS, README overhaul, SECURITY
+- **Timestamp**: 2026-06-25 00:00 UTC
+- **Change**:
+  - Added `.github/dependabot.yml` — weekly Docker and GitHub Actions CVE scanning.
+  - Enhanced `.github/CODEOWNERS` — component-specific ownership routing for nginx,
+    systemd, kb.js, Dockerfile, install.sh, SECURITY.md, and docs/ai/.
+  - Overhauled `README.md` — Mermaid architecture diagram, VirtualKeyBar section with
+    actual JS code snippet from kb.js, Security Posture table, reference-style links,
+    expanded Tailscale section, all fenced blocks with language tags.
+  - Enhanced `SECURITY.md` — added Dependabot section, expanded hardening table with
+    priority ratings and rate-limiting recommendation.
+  - Added `docs/ai/decision-log.md` entries for Mermaid diagram and Dependabot decisions.
+- **Rationale**: Strategic promotion blueprint analysis identified gaps vs. leading
+  terminal repositories: missing automated dependency scanning, weak CODEOWNERS routing,
+  no visual architecture diagram, missing VirtualKeyBar documentation, and no security
+  posture summary in README.
+- **Affected areas**: `.github/dependabot.yml`, `.github/CODEOWNERS`, `README.md`,
+  `SECURITY.md`, `docs/ai/decision-log.md`, `docs/ai/change-trace.md`
+- **Related commit**: pending
+- **Related decisions**: [2026-06-25] Mermaid diagram, [2026-06-25] Dependabot
+
 ### [2026-06-20] Fix mobile keyboard overlap — iOS Safari (v2, explicit height)
 - **Timestamp**: 2026-06-20 07:05 UTC
 - **Change**: Rewrote `updateLayout()` in `src/kb.js`:

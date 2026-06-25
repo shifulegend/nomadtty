@@ -2,3 +2,10 @@
 *.swo
 .DS_Store
 node_modules/
+package.json
+package-lock.json
+
+# Playwright intermediate video files and palette frames (keep final GIFs/PNGs)
+docs/assets/_videos/
+docs/assets/_videos_*/
+docs/assets/_palette*.png
