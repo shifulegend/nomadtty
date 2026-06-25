@@ -18,28 +18,13 @@ your work.
 
 ## Demo
 
-### Mobile — sticky CTRL modifier and Fn row (iPhone 14 viewport)
-
-![NomadTTY mobile demo — CTRL modifier and Fn row](docs/assets/demo-mobile.gif)
-
 ### Desktop (1280 × 720)
 
 ![NomadTTY desktop demo](docs/assets/demo-desktop.gif)
 
-### Side-by-side device screenshots
-
-| iPhone 14 | Pixel 7 (Android) |
-|:---------:|:-----------------:|
-| ![iPhone 14](docs/assets/screenshot-iphone14.png) | ![Pixel 7](docs/assets/screenshot-pixel7.png) |
-
 ### Toolbar — CTRL active (blue) + F-key row expanded
 
 ![Toolbar with CTRL modifier active and F1–F12 row open](docs/assets/screenshot-toolbar-fn.png)
-
-> **How these were captured:** Playwright device emulation (Chromium headless) at iPhone 14
-> (390 × 844) and Pixel 7 (412 × 915) viewports against a live ttyd + nginx stack.
-> Video recorded with `context.recordVideo`, converted to GIF with ffmpeg palette method.
-> See [`scripts/capture-demo.mjs`](scripts/capture-demo.mjs) to reproduce.
 
 ### iPhone 15 Pro Max
 
