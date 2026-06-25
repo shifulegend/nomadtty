@@ -2,24 +2,37 @@
 
 [![CI](https://github.com/shifulegend/nomadtty/actions/workflows/ci.yml/badge.svg)](https://github.com/shifulegend/nomadtty/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Docker Image](https://ghcr-badge.egpl.dev/shifulegend/nomadtty/size)](https://ghcr.io/shifulegend/nomadtty)
 
 **A mobile-friendly web terminal you can access from anywhere.**
 
-NomadTTY wraps [ttyd](https://github.com/tsl0922/ttyd) with a purpose-built mobile keyboard toolbar — giving you ESC, TAB, arrow keys, modifier keys (Ctrl/Shift/Alt), F1–F12, and more, all from a phone or tablet browser. Sessions are persistent via [tmux](https://github.com/tmux/tmux), so closing your browser never kills your work.
+NomadTTY wraps [ttyd] with a purpose-built mobile keyboard toolbar — giving you ESC,
+TAB, arrow keys, modifier keys (Ctrl/Shift/Alt), F1–F12, and more, all from a phone or
+tablet browser. Sessions are persistent via [tmux], so closing your browser never kills
+your work.
+
+[ttyd]: https://github.com/tsl0922/ttyd
+[tmux]: https://github.com/tmux/tmux
 
 ---
 
 ## Features
 
-- **Mobile-first toolbar** — tap CTRL, SHFT, or ALT to activate sticky modifiers, then type on your phone keyboard to send `Ctrl+C`, `Alt+B`, etc.
+- **Mobile-first toolbar** — tap CTRL, SHFT, or ALT to activate sticky modifiers, then
+  type on your phone keyboard to send `Ctrl+C`, `Alt+B`, etc.
 - **Full navigation keys** — ESC, TAB, Shift+TAB, ↑↓←→, HOME, END, PGUP, PGDN, INS, DEL
 - **F1–F12** via Fn toggle row
 - **Modifier combinations** — CTRL+SHFT, CTRL+ALT, ALT+SHFT and all three together
 - **Pinch-to-zoom safe** — `touch-action: pan-y` prevents accidental iOS zoom
-- **Mobile keyboard aware** — `visualViewport` listener resizes the terminal when the on-screen keyboard appears/disappears
+- **Mobile keyboard aware** — `visualViewport` listener resizes the terminal when the
+  on-screen keyboard appears or disappears
+- **Touch scroll** — finger swipe scrolls tmux scrollback on iOS and Android
+- **Paste button** — clipboard API on HTTPS; fallback textarea overlay on HTTP
 - **Responsive font** — 14 px desktop → 13 px tablet → 12 px phone
-- **Persistent sessions** — tmux keeps your session alive across disconnects
-- **Zero JavaScript dependencies** — pure vanilla JS, ~9 KB, injected via nginx `sub_filter`
+- **Persistent sessions** — tmux keeps your session alive across disconnects and
+  browser closes
+- **Zero JavaScript dependencies** — pure vanilla JS, ~9 KB, injected via nginx
+  `sub_filter`
 
 ---
 
@@ -102,6 +115,101 @@ sudo systemctl enable --now ttyd
 
 ---
 
+## Architecture
+
+```mermaid
+graph LR
+    Client["📱 Client\nPhone / Tablet / Desktop\nTailscale network"]
+
+    subgraph server ["Linux server"]
+        Nginx["nginx :80\nHTTP reverse proxy"]
+        KbJs["/var/www/nomadtty/kb.js\nMobile toolbar"]
+        TTYD["ttyd :47821\n127.0.0.1 only"]
+        TMUX["tmux\nsession: main"]
+        Bash["bash\npersistent shell"]
+    end
+
+    Client -- "HTTP :80" --> Nginx
+    Nginx -- "GET /kb.js\n(no-cache)" --> KbJs
+    Nginx -- "GET /ws\nWebSocket upgrade\npass-through" --> TTYD
+    Nginx -- "GET /\nsub_filter injects:\n① viewport meta\n② WS hook script\n③ script src=/kb.js" --> TTYD
+    TTYD -- "spawns" --> TMUX
+    TMUX -- "attaches or creates" --> Bash
+    KbJs -. "window._S.send('0'+bytes)\nPTY input" .-> TTYD
+```
+
+### How the injection works
+
+nginx's `sub_filter` rewrites ttyd's `<head>` on the fly before the HTML reaches the
+browser. Three items are injected in a single pass:
+
+1. **Viewport meta tag** — mobile scaling, prevents iOS double-tap zoom, triggers
+   keyboard-resize-content on Android.
+2. **Inline WebSocket hook** (`< 300 B`) — overrides `window.WebSocket` before ttyd's
+   bundle loads. Stores the `/ws` connection as `window._S` so `kb.js` can send PTY
+   bytes without modifying ttyd's source.
+3. **`<script src="/kb.js" defer>`** — loads the full toolbar after the DOM is parsed.
+
+The toolbar then lives entirely in `src/kb.js`: a single self-contained IIFE with no
+dependencies, no build step, and no bundler.
+
+---
+
+## The VirtualKeyBar
+
+Executing complex terminal commands on mobile devices is painful because software
+keyboards lack essential modifier keys. NomadTTY's toolbar solves this with
+**sticky modifier keys**.
+
+To send a `SIGINT` (`Ctrl+C`):
+
+1. Tap **CTRL** — the button highlights blue and latches active.
+2. Type `C` on your phone keyboard.
+
+The toolbar intercepts the keydown event, calculates the correct ASCII control byte,
+and transmits it to the PTY:
+
+```javascript
+// Physical keydown interceptor in src/kb.js
+document.addEventListener('keydown', function (ev) {
+  if (!M.c && !M.s && !M.a) return;   // no modifier active — pass through
+  var k = ev.key;
+  ev.preventDefault();
+  if (M.c && k.length === 1) {
+    var code = k.toUpperCase().charCodeAt(0) - 64;  // 'C' → 67 − 64 = 3
+    if (code > 0 && code < 32) send(String.fromCharCode(code));  // sends \x03
+  }
+  resetMods();
+}, true);
+```
+
+The same mechanism handles ALT (sends ESC prefix) and SHIFT (uppercases), and all
+three can be active simultaneously for combinations like `Ctrl+Shift+Up`.
+
+---
+
+## Security Posture
+
+NomadTTY is designed for **private network deployment**, not public internet exposure.
+
+| Layer | Mechanism |
+|-------|-----------|
+| **ttyd isolation** | Binds to `127.0.0.1:47821` only — unreachable from outside the server |
+| **nginx as gateway** | The only public-facing process; enforces TLS, rate limits, auth |
+| **No built-in auth** | Your responsibility — Tailscale VPN is the recommended approach |
+| **Non-root service** | ttyd runs as the deploy user, not root |
+| **Sub-filter injection** | Inline hook is < 300 B; full toolbar in external `kb.js` |
+| **Dependabot scanning** | Automated CVE checks on Docker base and GitHub Actions pins |
+
+**Recommended deployment:** put NomadTTY behind [Tailscale](https://tailscale.com) so
+the terminal is never reachable from the public internet. Tailscale Serve adds
+automatic HTTPS on your `ts.net` domain.
+
+See [SECURITY.md](SECURITY.md) for the full hardening checklist and vulnerability
+disclosure process.
+
+---
+
 ## Keyboard Toolbar Reference
 
 | Key | What it sends |
@@ -116,30 +224,10 @@ sudo systemctl enable --now ttyd
 | **HOME / END** | `\x1b[H` / `\x1b[F` |
 | **PGUP / PGDN** | `\x1b[5~` / `\x1b[6~` |
 | **INS / DEL** | `\x1b[2~` / `\x1b[3~` |
+| **Paste** | Clipboard API (HTTPS) or overlay textarea (HTTP) |
 | **Fn** | Toggle F1–F12 row |
 | **F1–F12** | Standard xterm sequences |
 | **A− / A+** | Zoom terminal text in/out |
-
----
-
-## Architecture
-
-```
-Phone / Tablet (Tailscale)
-       │
-       ▼
-   nginx :80
-   ├── GET /kb.js  →  /var/www/nomadtty/kb.js  (toolbar JS, no-cache)
-   ├── GET /ws     →  ttyd :47821  (WebSocket, pass-through)
-   └── GET /       →  ttyd :47821  (HTML + sub_filter injects viewport meta
-                                    + WebSocket hook + <script src="/kb.js" defer>)
-                                        │
-                                        ▼
-                               ttyd spawns: tmux new-session -A -s main
-                                        │
-                                        ▼
-                                  persistent bash session
-```
 
 ---
 
@@ -148,12 +236,25 @@ Phone / Tablet (Tailscale)
 To expose NomadTTY only on your Tailscale network (no public internet):
 
 ```bash
-# Add a DNS record pointing terminal.yourdomain.com to your Tailscale IP
-# in your Tailscale DNS settings or via dnsmasq.
-
-# Or use Tailscale Serve for automatic HTTPS:
+# Option 1: Tailscale Serve — automatic HTTPS on your ts.net domain
 tailscale serve --bg http://localhost:80
+
+# Option 2: Point a DNS record at your Tailscale IP and set server_name
+NOMADTTY_HOST=terminal.yourdomain.com sudo -E bash -c \
+  'curl -fsSL https://raw.githubusercontent.com/shifulegend/nomadtty/main/install.sh | bash'
 ```
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for coding standards, branch naming
+conventions, and pull request requirements.
+
+Security issues go through [SECURITY.md](SECURITY.md) — please use private advisories,
+not public issues.
+
+For help, see [SUPPORT.md](SUPPORT.md).
 
 ---
 
@@ -162,9 +263,3 @@ tailscale serve --bg http://localhost:80
 NomadTTY itself is MIT licensed. See [LICENSE](LICENSE).
 
 Third-party components (ttyd, xterm.js, tmux, nginx) are credited in [NOTICE](NOTICE).
-
----
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). Security issues go through [SECURITY.md](SECURITY.md). For help, see [SUPPORT.md](SUPPORT.md).
