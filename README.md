@@ -41,19 +41,17 @@ your work.
 > Video recorded with `context.recordVideo`, converted to GIF with ffmpeg palette method.
 > See [`scripts/capture-demo.mjs`](scripts/capture-demo.mjs) to reproduce.
 
-### Real device — iPhone 15 Pro Max (live usage)
+### iPhone 15 Pro Max
 
-Captured on a real iPhone 15 Pro Max over 5G. Sensitive fields (server IP, session ID, URL,
-branch name) are redacted. Masking was OCR-guided using Tesseract 5 — verified with a
-second OCR pass to confirm zero leakage.
+Captured over 5G. Sensitive fields (server IP, session ID, URL, branch name) are redacted.
 
 | Toolbar + Claude Code help | iOS keyboard open |
 |:--------------------------:|:-----------------:|
-| ![Real device — toolbar and Claude Code help](docs/assets/real-device-01-toolbar-claude-help.png) | ![Real device — iOS keyboard open](docs/assets/real-device-02-keyboard-open.png) |
+| ![Toolbar and Claude Code help](docs/assets/real-device-01-toolbar-claude-help.png) | ![iOS keyboard open](docs/assets/real-device-02-keyboard-open.png) |
 
 | Keyboard appearing | Claude Code AI output |
 |:------------------:|:---------------------:|
-| ![Real device — keyboard appearing](docs/assets/real-device-03-keyboard-appearing.png) | ![Real device — Claude Code AI output](docs/assets/real-device-04-claude-ai-output.png) |
+| ![Keyboard appearing](docs/assets/real-device-03-keyboard-appearing.png) | ![Claude Code AI output](docs/assets/real-device-04-claude-ai-output.png) |
 
 ---
 
