@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="420" viewBox="0 0 1000 420">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0d1117"/>
+      <stop offset="100%" style="stop-color:#1a1f2e"/>
+    </linearGradient>
+    <linearGradient id="win" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#21262d"/>
+      <stop offset="100%" style="stop-color:#161b22"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1000" height="420" fill="url(#bg)"/>
+
+  <!-- Subtle grid lines -->
+  <g stroke="#1e2530" stroke-width="1" opacity="0.6">
+    <line x1="0" y1="60" x2="1000" y2="60"/>
+    <line x1="0" y1="120" x2="1000" y2="120"/>
+    <line x1="0" y1="180" x2="1000" y2="180"/>
+    <line x1="0" y1="240" x2="1000" y2="240"/>
+    <line x1="0" y1="300" x2="1000" y2="300"/>
+    <line x1="0" y1="360" x2="1000" y2="360"/>
+    <line x1="60" y1="0" x2="60" y2="420"/>
+    <line x1="120" y1="0" x2="120" y2="420"/>
+    <line x1="180" y1="0" x2="180" y2="420"/>
+    <line x1="240" y1="0" x2="240" y2="420"/>
+    <line x1="300" y1="0" x2="300" y2="420"/>
+    <line x1="360" y1="0" x2="360" y2="420"/>
+    <line x1="420" y1="0" x2="420" y2="420"/>
+    <line x1="480" y1="0" x2="480" y2="420"/>
+  </g>
+
+  <!-- LEFT: Terminal window mockup -->
+  <rect x="36" y="36" width="430" height="348" rx="10" fill="url(#win)" stroke="#30363d" stroke-width="1.5"/>
+
+  <!-- Title bar -->
+  <rect x="36" y="36" width="430" height="36" rx="10" fill="#21262d"/>
+  <rect x="36" y="54" width="430" height="18" fill="#21262d"/>
+
+  <!-- Window dots -->
+  <circle cx="63" cy="54" r="7" fill="#ff5f56"/>
+  <circle cx="87" cy="54" r="7" fill="#ffbd2e"/>
+  <circle cx="111" cy="54" r="7" fill="#27c93f"/>
+
+  <!-- Title bar text -->
+  <text x="251" y="59" text-anchor="middle" fill="#8b949e" font-family="'Courier New', monospace" font-size="12">nomadtty — bash — 80x24</text>
+
+  <!-- Terminal content -->
+  <text x="56" y="105" fill="#3fb950" font-family="'Courier New', monospace" font-size="13" font-weight="bold">ubuntu@server:~$</text>
+  <text x="190" y="105" fill="#e6edf3" font-family="'Courier New', monospace" font-size="13"> claude "fix the bug"</text>
+
+  <text x="56" y="130" fill="#58a6ff" font-family="'Courier New', monospace" font-size="12">✓  Claude Code  (ctrl+c to exit)</text>
+  <text x="56" y="152" fill="#8b949e" font-family="'Courier New', monospace" font-size="12">  Reading codebase...</text>
+  <text x="56" y="172" fill="#8b949e" font-family="'Courier New', monospace" font-size="12">  Found issue in src/kb.js:42</text>
+
+  <text x="56" y="200" fill="#3fb950" font-family="'Courier New', monospace" font-size="13" font-weight="bold">ubuntu@server:~$</text>
+  <text x="190" y="200" fill="#e6edf3" font-family="'Courier New', monospace" font-size="13"> git log --oneline -3</text>
+  <text x="56" y="222" fill="#e6edf3" font-family="'Courier New', monospace" font-size="12">b05fa8e fix: touch scroll support</text>
+  <text x="56" y="240" fill="#e6edf3" font-family="'Courier New', monospace" font-size="12">b5e5e4c fix: visualViewport</text>
+  <text x="56" y="258" fill="#e6edf3" font-family="'Courier New', monospace" font-size="12">4b48144 chore: add CI</text>
+
+  <text x="56" y="286" fill="#3fb950" font-family="'Courier New', monospace" font-size="13" font-weight="bold">ubuntu@server:~$</text>
+  <!-- Blinking cursor block -->
+  <rect x="190" y="273" width="9" height="16" fill="#3fb950" opacity="0.9"/>
+
+  <!-- Keyboard toolbar at bottom of terminal -->
+  <rect x="36" y="332" width="430" height="52" rx="0" fill="#161b22" stroke-top="#30363d"/>
+  <rect x="36" y="332" width="430" height="1" fill="#30363d"/>
+
+  <!-- Toolbar buttons row 1 -->
+  <!-- ESC -->
+  <rect x="47" y="339" width="40" height="38" rx="5" fill="#21262d" stroke="#484f58" stroke-width="1"/>
+  <text x="67" y="363" text-anchor="middle" fill="#e6edf3" font-family="'Courier New', monospace" font-size="11" font-weight="bold">ESC</text>
+
+  <!-- CTRL (active/blue) -->
+  <rect x="92" y="339" width="42" height="38" rx="5" fill="#1f6feb" stroke="#388bfd" stroke-width="1.5"/>
+  <text x="113" y="363" text-anchor="middle" fill="#ffffff" font-family="'Courier New', monospace" font-size="11" font-weight="bold">CTRL</text>
+
+  <!-- TAB -->
+  <rect x="139" y="339" width="40" height="38" rx="5" fill="#21262d" stroke="#484f58" stroke-width="1"/>
+  <text x="159" y="363" text-anchor="middle" fill="#e6edf3" font-family="'Courier New', monospace" font-size="11" font-weight="bold">TAB</text>
+
+  <!-- Arrows -->
+  <rect x="184" y="339" width="32" height="38" rx="5" fill="#21262d" stroke="#484f58" stroke-width="1"/>
+  <text x="200" y="363" text-anchor="middle" fill="#e6edf3" font-family="'Courier New', monospace" font-size="16">↑</text>
+
+  <rect x="221" y="339" width="32" height="38" rx="5" fill="#21262d" stroke="#484f58" stroke-width="1"/>
+  <text x="237" y="363" text-anchor="middle" fill="#e6edf3" font-family="'Courier New', monospace" font-size="16">↓</text>
+
+  <rect x="258" y="339" width="32" height="38" rx="5" fill="#21262d" stroke="#484f58" stroke-width="1"/>
+  <text x="274" y="363" text-anchor="middle" fill="#e6edf3" font-family="'Courier New', monospace" font-size="16">←</text>
+
+  <rect x="295" y="339" width="32" height="38" rx="5" fill="#21262d" stroke="#484f58" stroke-width="1"/>
+  <text x="311" y="363" text-anchor="middle" fill="#e6edf3" font-family="'Courier New', monospace" font-size="16">→</text>
+
+  <!-- Fn -->
+  <rect x="332" y="339" width="32" height="38" rx="5" fill="#21262d" stroke="#484f58" stroke-width="1"/>
+  <text x="348" y="363" text-anchor="middle" fill="#e6edf3" font-family="'Courier New', monospace" font-size="11" font-weight="bold">Fn</text>
+
+  <!-- A- A+ -->
+  <rect x="369" y="339" width="32" height="38" rx="5" fill="#21262d" stroke="#484f58" stroke-width="1"/>
+  <text x="385" y="363" text-anchor="middle" fill="#e6edf3" font-family="'Courier New', monospace" font-size="11" font-weight="bold">A−</text>
+
+  <rect x="406" y="339" width="32" height="38" rx="5" fill="#21262d" stroke="#484f58" stroke-width="1"/>
+  <text x="422" y="363" text-anchor="middle" fill="#e6edf3" font-family="'Courier New', monospace" font-size="11" font-weight="bold">A+</text>
+
+  <!-- RIGHT SIDE: Branding -->
+  <!-- Green accent line -->
+  <rect x="510" y="60" width="4" height="60" rx="2" fill="#3fb950"/>
+
+  <!-- Main title -->
+  <text x="530" y="95" fill="#3fb950" font-family="'Courier New', monospace" font-size="15" font-weight="bold" letter-spacing="3">NOMADTTY</text>
+
+  <!-- Tag line -->
+  <text x="530" y="145" fill="#e6edf3" font-family="Arial, sans-serif" font-size="34" font-weight="700">Mobile Web</text>
+  <text x="530" y="192" fill="#e6edf3" font-family="Arial, sans-serif" font-size="34" font-weight="700">Terminal</text>
+
+  <!-- Divider -->
+  <rect x="530" y="210" width="380" height="1" fill="#30363d"/>
+
+  <!-- Feature tags -->
+  <text x="530" y="240" fill="#8b949e" font-family="'Courier New', monospace" font-size="14">ESC · CTRL · TAB · F1–F12</text>
+  <text x="530" y="265" fill="#8b949e" font-family="'Courier New', monospace" font-size="14">Sticky modifiers · Persistent tmux</text>
+  <text x="530" y="290" fill="#8b949e" font-family="'Courier New', monospace" font-size="14">Zero JS deps · 9 KB · MIT</text>
+
+  <!-- Divider -->
+  <rect x="530" y="308" width="380" height="1" fill="#30363d"/>
+
+  <!-- Docker command -->
+  <text x="530" y="335" fill="#58a6ff" font-family="'Courier New', monospace" font-size="12">$ docker run -d -p 80:80 \</text>
+  <text x="530" y="353" fill="#58a6ff" font-family="'Courier New', monospace" font-size="12">    ghcr.io/shifulegend/nomadtty:latest</text>
+
+  <!-- GitHub badge -->
+  <rect x="530" y="368" width="300" height="28" rx="14" fill="#21262d" stroke="#30363d" stroke-width="1"/>
+  <text x="543" y="387" fill="#8b949e" font-family="'Courier New', monospace" font-size="11">⭐</text>
+  <text x="560" y="387" fill="#58a6ff" font-family="'Courier New', monospace" font-size="11">github.com/shifulegend/nomadtty</text>
+</svg>
