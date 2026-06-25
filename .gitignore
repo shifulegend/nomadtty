@@ -9,3 +9,7 @@ package-lock.json
 docs/assets/_videos/
 docs/assets/_videos_*/
 docs/assets/_palette*.png
+
+# Local secrets
+.env.local
+.env.secrets
