@@ -1,2 +1,25 @@
-# All paths — single maintainer
+# Default owner for everything not matched below
 * @shifulegend
+
+# Core toolbar — any kb.js change requires maintainer review
+src/kb.js @shifulegend
+
+# nginx config — sub_filter injection chain is safety-critical
+nginx/ @shifulegend
+
+# systemd service — --writable flag and User= are safety-critical
+systemd/ @shifulegend
+
+# Container entrypoint and image definition
+Dockerfile @shifulegend
+docker-entrypoint.sh @shifulegend
+
+# Installer — shellcheck must pass before merge
+install.sh @shifulegend
+
+# Security policy — changes require explicit maintainer approval
+SECURITY.md @shifulegend
+
+# AI development system — canonical docs must stay in sync with adapters
+docs/ai/ @shifulegend
+CLAUDE.md @shifulegend
