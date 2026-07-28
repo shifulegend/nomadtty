@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>NomadTTY — Session Manager</title>
+  <style>
+    /* ── DESIGN.md compliance ──
+       Monospace only, near-black background, single blue accent,
+       34-38px touch targets, no gradients/shadows beyond subtle elevation. */
+    html,body{margin:0;height:100%;background:#0b0b0c;color:#ccc;
+      font-family:monospace;overflow-y:auto;-webkit-user-select:none;}
+    #sm-root{max-width:480px;margin:0 auto;padding:20px 16px 40px;
+      padding-top:calc(20px + env(safe-area-inset-top));}
+    h1{font-size:18px;color:#fff;margin:0 0 4px;}
+    .sub{font-size:13px;color:#888;margin:0 0 20px;}
+    #new-session-btn{width:100%;background:#0052cc;color:#fff;
+      border:1px solid #0077ff;border-radius:6px;padding:12px;
+      font:13px/1 monospace;cursor:pointer;touch-action:manipulation;
+      -webkit-tap-highlight-color:transparent;margin-bottom:20px;}
+    #new-session-btn:active{background:#0077ff;}
+    #list-status{font-size:12px;color:#666;margin-bottom:10px;}
+    .session-row{display:flex;align-items:center;gap:8px;
+      background:#141414;border:1px solid #262626;border-radius:8px;
+      padding:10px 12px;margin-bottom:8px;}
+    .session-info{flex:1;min-width:0;}
+    .session-label{color:#fff;font-size:13px;margin:0 0 2px;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .session-meta{font-size:11px;color:#777;}
+    .session-actions{display:flex;gap:6px;flex:0 0 auto;}
+    .sm-btn{min-width:34px;min-height:34px;border-radius:6px;
+      font:11px/1 monospace;border:1px solid #333;background:#1e1e1e;
+      color:#ccc;cursor:pointer;touch-action:manipulation;
+      -webkit-tap-highlight-color:transparent;padding:0 10px;}
+    .sm-btn.join{border-color:#0077ff;color:#7fb8ff;}
+    .sm-btn.join:active{background:#005fcc;color:#fff;}
+    .sm-btn.close{border-color:#552222;color:#e08787;}
+    .sm-btn.close:active{background:#7a1f1f;color:#fff;}
+    #empty-state{font-size:13px;color:#666;text-align:center;padding:30px 0;}
+  </style>
+</head>
+<body>
+  <div id="sm-root">
+    <h1>Session Manager</h1>
+    <p class="sub">Open terminal sessions persist in the background.</p>
+    <button id="new-session-btn">+ Create New Session</button>
+    <div id="list-status">Loading sessions&hellip;</div>
+    <div id="session-list"></div>
+    <div id="empty-state" style="display:none">No open sessions. Create one to get started.</div>
+  </div>
+  <script src="/session-manager.js" defer></script>
+</body>
+</html>
