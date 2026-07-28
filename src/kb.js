@@ -367,8 +367,16 @@
      visible layout. No resize event is fired on unmount or remount. */
   function showSessionManager(e) {
     if (e) e.preventDefault();
-    document.getElementById('kb').style.display = 'none';
-    document.getElementById('terminal-container').style.display = 'none';
+    /* Do NOT touch #terminal-container's or #kb's display/visibility.
+       #terminal-container is watched by a ResizeObserver (see
+       watchTerminalContainer()) that fires a window 'resize' event on
+       any content-box change -- toggling display:none on it would
+       shrink its box to 0x0 and trigger exactly the resize we must
+       avoid. Instead, #session-manager is a position:fixed, inset:0,
+       opaque, higher z-index (100001) layer that simply covers the
+       terminal visually. The terminal view is "unmounted" from the
+       user's perspective without ever altering its box, so no resize
+       fires and the underlying WebSocket/TTY process is untouched. */
     backBtn.style.display = 'none';
     sm.style.display = 'flex';
   }
@@ -376,12 +384,10 @@
   function resumeSession(e) {
     if (e) e.preventDefault();
     sm.style.display = 'none';
-    document.getElementById('kb').style.display = '';
-    document.getElementById('terminal-container').style.display = '';
     backBtn.style.display = 'flex';
-    /* No forced resize here either: the terminal container's geometry
-       was never altered while hidden, so xterm's canvas is already
-       correctly sized and does not need a recalculation. */
+    /* #terminal-container's geometry was never altered while covered,
+       so xterm's canvas is already correctly sized and does not need
+       -- and must not trigger -- a recalculation. */
   }
 
   backBtn.addEventListener('click', showSessionManager);
