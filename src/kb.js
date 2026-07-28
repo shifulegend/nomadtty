@@ -296,6 +296,33 @@
     '.xterm-viewport::-webkit-scrollbar{display:none;}',
     /* Canvas blocks touch; we handle touch ourselves below */
     '.xterm-screen{touch-action:none!important;}',
+
+    /* ── Back button (Session Manager overlay) ──
+       position:fixed + its own z-index layer, NOT part of #kb toolbar rows.
+       Deliberately excluded from updateLayout()'s toolbarH math, so it
+       consumes 0% of the terminal grid -- it only visually overlays the
+       canvas. See DESIGN.md for full rationale. */
+    '#back-btn{position:fixed;',
+      'top:calc(8px + env(safe-area-inset-top));',
+      'right:calc(8px + env(safe-area-inset-right));',
+      'z-index:100000;width:34px;height:34px;border-radius:50%;',
+      'background:rgba(17,17,17,.85);color:#ccc;border:1px solid #333;',
+      'display:flex;align-items:center;justify-content:center;',
+      'font:16px/1 monospace;-webkit-tap-highlight-color:transparent;',
+      'touch-action:manipulation;pointer-events:auto;}',
+    '#back-btn:active{background:#005fcc;color:#fff;border-color:#0077ff;}',
+
+    '#session-manager{position:fixed;inset:0;z-index:100001;display:none;',
+      'align-items:center;justify-content:center;background:#0b0b0c;',
+      'color:#ccc;font-family:monospace;}',
+    '.sm-card{max-width:320px;text-align:center;padding:24px;}',
+    '.sm-card h1{font-size:18px;margin:0 0 8px;color:#fff;}',
+    '.sm-sub{font-size:13px;color:#888;margin:0 0 20px;line-height:1.5;}',
+    '#sm-resume{background:#0052cc;color:#fff;border:1px solid #0077ff;',
+      'border-radius:6px;padding:10px 20px;font:13px/1 monospace;',
+      'cursor:pointer;touch-action:manipulation;',
+      '-webkit-tap-highlight-color:transparent;}',
+    '#sm-resume:active{background:#0077ff;}',
   ].join('');
 
   var style = document.createElement('style');
@@ -308,6 +335,60 @@
     '<div class="kr">' + row1 + '</div>' +
     '<div class="kr" id="fn-row" style="display:none">' + fnrow + '</div>';
   document.body.insertBefore(kb, document.body.firstChild);
+
+  /* ── Back button + Session Manager overlay ──
+     Implemented as a fixed-position circular button, appended to <body>
+     as a *sibling* of #kb and #terminal-container -- not inside either.
+     Because it is position:fixed and excluded from updateLayout()'s
+     toolbarH/termH calculation, it occupies 0% of the terminal grid:
+     it visually floats above the canvas without resizing it. Tapping it
+     never touches #terminal-container's dimensions and never dispatches
+     a 'resize' event, so xterm.js's fitAddon is never invoked. */
+  var backBtn = document.createElement('button');
+  backBtn.id = 'back-btn';
+  backBtn.setAttribute('aria-label', 'Back to Session Manager');
+  backBtn.innerHTML = '&larr;';
+  document.body.appendChild(backBtn);
+
+  var sm = document.createElement('div');
+  sm.id = 'session-manager';
+  sm.innerHTML =
+    '<div class="sm-card">' +
+      '<h1>Session Manager</h1>' +
+      '<p class="sm-sub">Your terminal session is still running in the background.' +
+      ' The WebSocket/TTY connection has not been closed.</p>' +
+      '<button id="sm-resume">Resume Session</button>' +
+    '</div>';
+  document.body.appendChild(sm);
+
+  /* Unmount = hide via CSS display:none, NOT remove from DOM and NOT
+     touch window._S (the WebSocket). The underlying ttyd WebSocket/TTY
+     process is untouched -- only the *view* is detached from the
+     visible layout. No resize event is fired on unmount or remount. */
+  function showSessionManager(e) {
+    if (e) e.preventDefault();
+    document.getElementById('kb').style.display = 'none';
+    document.getElementById('terminal-container').style.display = 'none';
+    backBtn.style.display = 'none';
+    sm.style.display = 'flex';
+  }
+
+  function resumeSession(e) {
+    if (e) e.preventDefault();
+    sm.style.display = 'none';
+    document.getElementById('kb').style.display = '';
+    document.getElementById('terminal-container').style.display = '';
+    backBtn.style.display = 'flex';
+    /* No forced resize here either: the terminal container's geometry
+       was never altered while hidden, so xterm's canvas is already
+       correctly sized and does not need a recalculation. */
+  }
+
+  backBtn.addEventListener('click', showSessionManager);
+  backBtn.addEventListener('touchend', showSessionManager);
+  document.getElementById('sm-resume').addEventListener('click', resumeSession);
+  document.getElementById('sm-resume').addEventListener('touchend', resumeSession);
+
 
   /* Run layout after DOM settles and again after xterm renders */
   setTimeout(updateLayout, 100);
