@@ -312,17 +312,6 @@
       'touch-action:manipulation;pointer-events:auto;}',
     '#back-btn:active{background:#005fcc;color:#fff;border-color:#0077ff;}',
 
-    '#session-manager{position:fixed;inset:0;z-index:100001;display:none;',
-      'align-items:center;justify-content:center;background:#0b0b0c;',
-      'color:#ccc;font-family:monospace;}',
-    '.sm-card{max-width:320px;text-align:center;padding:24px;}',
-    '.sm-card h1{font-size:18px;margin:0 0 8px;color:#fff;}',
-    '.sm-sub{font-size:13px;color:#888;margin:0 0 20px;line-height:1.5;}',
-    '#sm-resume{background:#0052cc;color:#fff;border:1px solid #0077ff;',
-      'border-radius:6px;padding:10px 20px;font:13px/1 monospace;',
-      'cursor:pointer;touch-action:manipulation;',
-      '-webkit-tap-highlight-color:transparent;}',
-    '#sm-resume:active{background:#0077ff;}',
   ].join('');
 
   var style = document.createElement('style');
@@ -336,64 +325,34 @@
     '<div class="kr" id="fn-row" style="display:none">' + fnrow + '</div>';
   document.body.insertBefore(kb, document.body.firstChild);
 
-  /* ── Back button + Session Manager overlay ──
-     Implemented as a fixed-position circular button, appended to <body>
-     as a *sibling* of #kb and #terminal-container -- not inside either.
-     Because it is position:fixed and excluded from updateLayout()'s
-     toolbarH/termH calculation, it occupies 0% of the terminal grid:
-     it visually floats above the canvas without resizing it. Tapping it
-     never touches #terminal-container's dimensions and never dispatches
-     a 'resize' event, so xterm.js's fitAddon is never invoked. */
+  /* ── Back button: return to server-rendered Session Manager ──
+     With the backend Session Manager (server/session-manager.js) now
+     owning session lifecycle, the Back button simply navigates the
+     browser to "/" -- the Session Manager list page. This unloads the
+     current page's WebSocket connection (browsers always close a page's
+     sockets on navigation), but that is purely the *client* view.
+     The backend ttyd process and its wrapped tmux session are never
+     sent SIGTERM/SIGKILL by navigation -- only the Session Manager's
+     explicit "Close" action does that (see server/session-manager.js
+     closeSession()). tmux itself buffers scrollback server-side, so
+     when the user re-Joins via /term/<id>/, a fresh WebSocket attaches
+     to the *same* tmux session and its scroll buffer is intact --
+     nothing about scrollback lives in the browser tab that was closed.
+     This button is still position:fixed, 0% of the terminal grid, and
+     never touches #terminal-container's box or fires a resize event. */
   var backBtn = document.createElement('button');
   backBtn.id = 'back-btn';
   backBtn.setAttribute('aria-label', 'Back to Session Manager');
   backBtn.innerHTML = '&larr;';
   document.body.appendChild(backBtn);
 
-  var sm = document.createElement('div');
-  sm.id = 'session-manager';
-  sm.innerHTML =
-    '<div class="sm-card">' +
-      '<h1>Session Manager</h1>' +
-      '<p class="sm-sub">Your terminal session is still running in the background.' +
-      ' The WebSocket/TTY connection has not been closed.</p>' +
-      '<button id="sm-resume">Resume Session</button>' +
-    '</div>';
-  document.body.appendChild(sm);
-
-  /* Unmount = hide via CSS display:none, NOT remove from DOM and NOT
-     touch window._S (the WebSocket). The underlying ttyd WebSocket/TTY
-     process is untouched -- only the *view* is detached from the
-     visible layout. No resize event is fired on unmount or remount. */
-  function showSessionManager(e) {
+  function goToSessionManager(e) {
     if (e) e.preventDefault();
-    /* Do NOT touch #terminal-container's or #kb's display/visibility.
-       #terminal-container is watched by a ResizeObserver (see
-       watchTerminalContainer()) that fires a window 'resize' event on
-       any content-box change -- toggling display:none on it would
-       shrink its box to 0x0 and trigger exactly the resize we must
-       avoid. Instead, #session-manager is a position:fixed, inset:0,
-       opaque, higher z-index (100001) layer that simply covers the
-       terminal visually. The terminal view is "unmounted" from the
-       user's perspective without ever altering its box, so no resize
-       fires and the underlying WebSocket/TTY process is untouched. */
-    backBtn.style.display = 'none';
-    sm.style.display = 'flex';
+    window.location.href = '/';
   }
 
-  function resumeSession(e) {
-    if (e) e.preventDefault();
-    sm.style.display = 'none';
-    backBtn.style.display = 'flex';
-    /* #terminal-container's geometry was never altered while covered,
-       so xterm's canvas is already correctly sized and does not need
-       -- and must not trigger -- a recalculation. */
-  }
-
-  backBtn.addEventListener('click', showSessionManager);
-  backBtn.addEventListener('touchend', showSessionManager);
-  document.getElementById('sm-resume').addEventListener('click', resumeSession);
-  document.getElementById('sm-resume').addEventListener('touchend', resumeSession);
+  backBtn.addEventListener('click', goToSessionManager);
+  backBtn.addEventListener('touchend', goToSessionManager);
 
 
   /* Run layout after DOM settles and again after xterm renders */
