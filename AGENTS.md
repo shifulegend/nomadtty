@@ -38,3 +38,14 @@ Persistent tmux sessions. Vanilla JS, no bundler, no dependencies.
 - Claude Code: `CLAUDE.md` + `.claude/rules/`
 - Copilot: `.github/copilot-instructions.md` + `.github/instructions/`
 - Antigravity: `gemini/GEMINI.md` + `.agents/rules/`
+
+## Agentic Session Constraints (added 2026-07-29)
+
+### Commit Discipline (Mandatory)
+After every logical task is completed and verified, the agent MUST explicitly execute a `git add`, `git commit` with a descriptive message, and `git push` before proceeding to the next task. No batching unrelated changes into a single commit, and no skipping this step under time pressure or task complexity.
+
+### CI & Linting Integrity (Mandatory)
+No CI tests or linting rules are to be skipped, disabled, or removed under any circumstances, regardless of whether they appear to block progress. If a test or lint rule seems incorrect, flag it explicitly for human review rather than bypassing it.
+
+### Terminal Emulator Performance Constraint
+The primary UI for this application is a terminal emulator. Heavy DOM reflows must be avoided at all costs. Any change touching rendering, layout, or frequent re-renders must be evaluated for reflow/repaint cost before merging. Prefer virtualized rendering, batched updates, and off-DOM computation wherever possible.
