@@ -5,6 +5,30 @@
 
 ---
 
+### [2026-07-29-010] get_screenshot/scroll_buffer showed near-empty content on a fresh session
+- **Timestamp**: 2026-07-29 04:35 UTC
+- **Summary**: `captureViewport(tmuxName, { offsetFromBottom: 0 })` (backing `get_screenshot` and the live view in
+  `scroll_buffer`) computed `end = -offsetFromBottom` (i.e. `0`) and `start = end - height + 1`, anchoring
+  the captured range on tmux row 0 (the pane's fixed top) rather than the cursor's current row. On a
+  session that hadn't yet filled its whole pane, this returned only the first line or two of real content
+  and cut off everything after it (the actual command output and the next prompt) — the exact same class of
+  bug as 2026-07-29-008's `captureTail`, in the same file, missed when only `captureTail` was fixed.
+- **Root cause**: Never anchored `captureViewport` on `#{cursor_y}` when fixing the sibling bug in
+  `captureTail`. The bug was masked in prior manual testing because that test used a `seq 1 200` session
+  whose pane was already completely full, where `cursor_y` happens to equal `height - 1` — coincidentally
+  matching the buggy formula's assumption and hiding the defect.
+- **Affected files**: `server/mcp/tmux.js` (`captureViewport`)
+- **Detection method**: Ran `scripts/verify-mcp-agent.mjs` (a genuinely independent, from-scratch MCP client)
+  against a *freshly created* session — `get_screenshot` returned only the echoed input line, not the
+  command's real output or the next prompt, even though `type_command` had clearly succeeded.
+- **Correction**: Anchor `captureViewport` on `#{cursor_y}` exactly like `captureTail`:
+  `end = cursorY - offsetFromBottom`, `start = end - height + 1`. Re-verified both the previously-broken
+  fresh-session case and the previously-passing full-pane case (`scroll_buffer` up/down) after the fix.
+- **Prevention rule**: When one of several sibling functions sharing the same coordinate-system bug gets
+  fixed, audit every other function using that same coordinate system before considering the bug closed —
+  and prefer testing against a fresh/sparse session over an artificially full one, since a full pane can
+  coincidentally mask an anchor-point bug that a sparse one exposes immediately.
+
 ### [2026-07-29-009] Playwright: "wait for 2 occurrences" flaked when a redraw split the echoed input
 - **Timestamp**: 2026-07-29 04:15 UTC
 - **Summary**: `tests/helpers/ws-capture.js`'s `waitForOutputCount(marker, 2)` (added to distinguish a

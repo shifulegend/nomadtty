@@ -84,10 +84,20 @@ function captureTail(tmuxName, n, { ansi = false } = {}) {
  * get_screenshot and scroll_buffer return: a textual/ANSI capture, since
  * ttyd/tmux is a text-mode PTY with no server-side pixel renderer (see
  * tools.js get_screenshot for the fuller rationale).
+ *
+ * Anchored on `#{cursor_y}` (where real content currently ends), not row 0
+ * (the pane's fixed geometric top): tmux row numbering treats row 0 as the
+ * top of the pane/history boundary, counting *down* from there, so
+ * `offsetFromBottom=0` naively computed as `[-height+1, 0]` would capture
+ * a window ending at the very top of the pane instead of at the live
+ * cursor position -- correct only by coincidence once a pane is already
+ * completely full (cursor sits at height-1, same as the naive "0").
+ * See mistakes.md 2026-07-29-008 for the sibling bug this mirrors in
+ * captureTail().
  */
 function captureViewport(tmuxName, { ansi = false, offsetFromBottom = 0 } = {}) {
-  const { height } = getPaneInfo(tmuxName);
-  const end = -offsetFromBottom;
+  const { height, cursorY } = getPaneInfo(tmuxName);
+  const end = cursorY - offsetFromBottom;
   const start = end - height + 1;
   return capturePane(tmuxName, { ansi, start, end });
 }

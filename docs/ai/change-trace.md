@@ -17,6 +17,24 @@
 
 ---
 
+### [2026-07-29] Independent MCP verification agent; fixed a get_screenshot/scroll_buffer bug it found
+- **Timestamp**: 2026-07-29 04:40 UTC
+- **Change**:
+  - Added `scripts/verify-mcp-agent.mjs` — a standalone Node script (raw `fetch` + hand-rolled JSON-RPC/SSE
+    parsing, no `@modelcontextprotocol/sdk`, no test framework) that creates a real session, authenticates
+    to the MCP server, and sequences `type_command` → `get_screenshot` to prove the Streamable HTTP
+    transport works end-to-end from a genuinely independent client implementation.
+  - Running it against a freshly created session surfaced a real bug: fixed `captureViewport` in
+    `server/mcp/tmux.js` to anchor on `#{cursor_y}` instead of tmux row 0, mirroring the `captureTail` fix
+    from earlier the same day (mistakes.md 2026-07-29-008) that had not been applied to this sibling
+    function. Re-verified both the fresh-session case (previously broken) and the full-pane
+    `scroll_buffer` case (previously passing) after the fix.
+- **Rationale**: A from-scratch client, run against a real fresh session rather than an artificially
+  pre-filled one, caught a bug that manual testing with a full pane had coincidentally masked.
+- **Affected areas**: `scripts/verify-mcp-agent.mjs` (new), `server/mcp/tmux.js`
+- **Related commit**: pending
+- **Related mistakes**: `docs/ai/mistakes.md` 2026-07-29-010
+
 ### [2026-07-29] MCP server: expose terminal sessions to local AI agents
 - **Timestamp**: 2026-07-29 04:00 UTC
 - **Change**:
