@@ -34,6 +34,34 @@ function toBuffer(payload) {
 }
 
 /**
+ * Strips ANSI/VT escape sequences (CSI, OSC, and short two/three-byte
+ * escapes) from captured PTY output. tmux's own redraws -- not just
+ * xterm.js's -- routinely reposition the cursor (e.g. `ESC[A` to move up a
+ * row) instead of emitting a plain `\r\n` when a line lands at the very
+ * bottom of the scroll region, which a naive "look for `\r\n` immediately
+ * before/after this text" check can't see past. Stripping escapes first
+ * reduces the buffer to what a human actually reads, so the only thing
+ * left to determine line boundaries is real `\r`/`\n` bytes.
+ *
+ * Critically, tmux can express "the pane scrolled up N lines" purely via
+ * `ESC[<N>S` (Scroll Up) plus a cursor-position sequence, with NO literal
+ * newline byte anywhere in the stream -- observed when output lands
+ * exactly at the bottom of the scroll region during a busy/fast-scrolling
+ * stream. That sequence is semantically N line breaks even though no `\n`
+ * byte exists, so it's converted to literal `\n`s before the generic CSI
+ * stripping pass would otherwise just delete it and the line-boundary
+ * information with it.
+ */
+function stripAnsi(str) {
+  return str
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '') // OSC: ESC ] ... (BEL | ST)
+    .replace(/\x1b\[(\d*)S/g, (_m, n) => '\n'.repeat(parseInt(n, 10) || 1)) // Scroll Up -> real newlines
+    .replace(/\x1b\[[0-9;?]*[\x20-\x2f]*[\x40-\x7e]/g, '') // CSI: ESC [ params... final-byte
+    .replace(/\x1b[()#%][0-9A-Za-z]/g, '') // charset designation, e.g. ESC(B
+    .replace(/\x1b[0-9A-Za-z=><]/g, ''); // short escapes, e.g. ESC=, ESC>, ESC7, ESC8, ESCc
+}
+
+/**
  * Attach a capture to the next ttyd WebSocket opened on this page and
  * return helpers to inspect it. Must be called before the action that
  * triggers the terminal connection (e.g. before clicking "Join").
@@ -113,17 +141,23 @@ function captureTerminalSocket(page) {
      * (which would otherwise make a second whole-substring match
      * impossible even though the command executed correctly) — the real
      * stdout write isn't subject to that same splitting.
+     *
+     * Matches against the ANSI-stripped buffer (see stripAnsi() above),
+     * since tmux can redraw a bottom-of-pane line via cursor repositioning
+     * rather than a plain `\r\n`, which would otherwise defeat the "real
+     * newline immediately before/after" check even though the line's own
+     * text arrived intact and uncorrupted.
      */
     waitForOutputLine(line, timeout = 10000) {
-      const pattern = new RegExp(`(?:^|\\r?\\n)${line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\r\\n`);
+      const pattern = new RegExp(`(?:^|\\r?\\n)${line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\r?\\n`);
       const start = Date.now();
       return new Promise((resolve, reject) => {
         (function check() {
-          if (pattern.test(output)) return resolve(output);
+          if (pattern.test(stripAnsi(output))) return resolve(output);
           if (Date.now() - start > timeout) {
             return reject(new Error(
               `Timed out waiting for PTY output to contain the line ${JSON.stringify(line)} on its own.\n` +
-              `Last 300 chars received: ${JSON.stringify(output.slice(-300))}`
+              `Last 300 chars (stripped) received: ${JSON.stringify(stripAnsi(output).slice(-300))}`
             ));
           }
           setTimeout(check, 25);

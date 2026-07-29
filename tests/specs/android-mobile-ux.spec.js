@@ -21,8 +21,10 @@ const {
   apiCloseAllSessions, createSessionViaUi, waitForTerminalReady, sessionRow,
 } = require('../helpers/session-manager');
 const { captureTerminalSocket } = require('../helpers/ws-capture');
+const { toggleOnScreenKeyboard } = require('../helpers/stress');
 
-test.use({ ...devices['Pixel 7'] });
+const PIXEL_7 = devices['Pixel 7'];
+test.use({ ...PIXEL_7 });
 
 test.afterEach(async ({ request }) => {
   await apiCloseAllSessions(request);
@@ -176,4 +178,77 @@ test('mobile toolbar: CTRL modifier, Fn row toggle, and zoom all function on a t
   await page.keyboard.type('echo still_alive_after_zoom');
   await page.keyboard.press('Enter');
   await capture.waitForOutputLine('still_alive_after_zoom');
+});
+
+test('toolbar buttons ignore drag/scroll gestures but still register a genuine stationary tap', async ({ page }) => {
+  await createSessionViaUi(page);
+  await waitForTerminalReady(page);
+
+  const ctrlBox = await page.locator('#kb-c').boundingBox();
+
+  // A finger that lands on CTRL and drags 150px sideways (exactly what
+  // scrolling the toolbar row feels like) must NOT toggle it -- see
+  // docs/ai/mistakes.md for the double-fire this previously caused.
+  await page.evaluate(({ sx, sy, ex, ey }) => {
+    const el = document.getElementById('kb-c');
+    const mkTouch = (x, y) => new Touch({ identifier: 1, target: el, clientX: x, clientY: y });
+    el.dispatchEvent(new TouchEvent('touchstart', { touches: [mkTouch(sx, sy)], changedTouches: [mkTouch(sx, sy)], bubbles: true, cancelable: true }));
+    el.dispatchEvent(new TouchEvent('touchmove', { touches: [mkTouch(ex, ey)], changedTouches: [mkTouch(ex, ey)], bubbles: true, cancelable: true }));
+    el.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [mkTouch(ex, ey)], bubbles: true, cancelable: true }));
+  }, { sx: ctrlBox.x + 5, sy: ctrlBox.y + 5, ex: ctrlBox.x + 155, ey: ctrlBox.y + 5 });
+  await expect(page.locator('#kb-c')).not.toHaveClass(/on/);
+
+  // A few px of natural finger tremor during a real tap must still count
+  // as a tap, not get misclassified as a drag.
+  await page.evaluate(({ sx, sy }) => {
+    const el = document.getElementById('kb-s');
+    const mkTouch = (x, y) => new Touch({ identifier: 2, target: el, clientX: x, clientY: y });
+    el.dispatchEvent(new TouchEvent('touchstart', { touches: [mkTouch(sx, sy)], changedTouches: [mkTouch(sx, sy)], bubbles: true, cancelable: true }));
+    el.dispatchEvent(new TouchEvent('touchmove', { touches: [mkTouch(sx + 3, sy + 2)], changedTouches: [mkTouch(sx + 3, sy + 2)], bubbles: true, cancelable: true }));
+    el.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [mkTouch(sx + 3, sy + 2)], bubbles: true, cancelable: true }));
+  }, { sx: ctrlBox.x + 15, sy: ctrlBox.y + 15 });
+  await expect(page.locator('#kb-s')).toHaveClass(/on/);
+
+  // A genuine, ordinary tap (Playwright's .tap()) must still work end to
+  // end -- this isn't a synthetic dispatch, it's the same path a real
+  // finger tap takes.
+  await page.locator('#kb-s').tap(); // reset off
+  const capture = captureTerminalSocket(page);
+  await page.reload();
+  await waitForTerminalReady(page);
+  await capture.waitForSocket();
+  await page.locator('#kb-c').tap();
+  await page.click('.xterm-screen');
+  await page.keyboard.press('c');
+  await page.keyboard.type('echo genuine_tap_still_works');
+  await page.keyboard.press('Enter');
+  await capture.waitForOutputLine('genuine_tap_still_works');
+});
+
+test('toggling the on-screen keyboard many times in a row never leaves the terminal layout corrupted', async ({ page }) => {
+  const capture = captureTerminalSocket(page);
+  await createSessionViaUi(page);
+  await waitForTerminalReady(page);
+  await capture.waitForSocket();
+
+  // Exhaustive: far more open/close cycles than a real session would ever
+  // see back to back, specifically to surface any layout state that leaks
+  // or drifts across repeated visualViewport-driven reflows.
+  for (let i = 0; i < 10; i++) {
+    await toggleOnScreenKeyboard(page, PIXEL_7.viewport, true);
+    const openRect = await page.evaluate(() => document.getElementById('terminal-container').getBoundingClientRect());
+    expect(openRect.height).toBeGreaterThan(0);
+    expect(openRect.top).toBeGreaterThanOrEqual(0);
+
+    await toggleOnScreenKeyboard(page, PIXEL_7.viewport, false);
+    const closedRect = await page.evaluate(() => document.getElementById('terminal-container').getBoundingClientRect());
+    expect(closedRect.height).toBeGreaterThan(0);
+  }
+
+  // After 10 full cycles, the terminal must still be genuinely usable, not
+  // just structurally non-zero.
+  await page.click('.xterm-screen');
+  await page.keyboard.type('echo alive_after_keyboard_toggle_stress');
+  await page.keyboard.press('Enter');
+  await capture.waitForOutputLine('alive_after_keyboard_toggle_stress');
 });

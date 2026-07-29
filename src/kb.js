@@ -360,6 +360,41 @@
     '<div class="kr" id="fn-row" style="display:none">' + fnrow + '</div>';
   document.body.insertBefore(kb, document.body.firstChild);
 
+  /* ── Suppress accidental button presses from scroll/drag gestures ──
+     Each toolbar button fires its action directly from its own
+     `ontouchend` attribute, not from the browser's synthesized 'click'
+     (which natively tolerates a small amount of finger movement before
+     suppressing itself) -- so without this guard, ANY touch gesture that
+     starts or passes through a button and lifts while still over an
+     element fires that element's action, even a full-width swipe used to
+     scroll `.kr`'s horizontally-scrolling row. A capture-phase listener on
+     `#kb` (an ancestor of every button) sees touchstart/touchmove/touchend
+     before each button's own bubble-phase handler, so it can measure total
+     finger movement and, if it exceeds a small tap-vs-drag threshold, call
+     stopPropagation() (and preventDefault(), which also suppresses the
+     compatibility click Chrome would otherwise still synthesize) to stop
+     the event from ever reaching the button's own handler. A genuine
+     stationary tap (movement under the threshold) is untouched. */
+  var DRAG_THRESHOLD_PX = 10;
+  var touchStartX = 0, touchStartY = 0, touchDragged = false;
+  kb.addEventListener('touchstart', function (e) {
+    if (e.touches.length !== 1) return;
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchDragged = false;
+  }, { capture: true, passive: true });
+  kb.addEventListener('touchmove', function (e) {
+    if (e.touches.length !== 1) return;
+    var dx = e.touches[0].clientX - touchStartX;
+    var dy = e.touches[0].clientY - touchStartY;
+    if (Math.sqrt(dx * dx + dy * dy) > DRAG_THRESHOLD_PX) touchDragged = true;
+  }, { capture: true, passive: true });
+  kb.addEventListener('touchend', function (e) {
+    if (!touchDragged) return;
+    e.preventDefault();
+    e.stopPropagation();
+  }, { capture: true, passive: false });
+
   /* ── Back button: return to server-rendered Session Manager ──
      With the backend Session Manager (server/session-manager.js) now
      owning session lifecycle, the Back button simply navigates the
@@ -396,45 +431,39 @@
   setTimeout(function () { updateLayout(); watchTerminalContainer(); }, 1500);
   window.addEventListener('resize', updateLayout);
 
-  /* ── Touch scroll: finger swipe → xterm.js wheel events ──
-     xterm.js has no built-in touch scroll (issue #5377). The canvas captures
-     all touch events but ignores vertical swipes. We intercept touchmove on
-     .xterm and dispatch a synthetic WheelEvent on .xterm-viewport, which is
-     the element xterm.js's own wheel handler already listens to. Works on
-     iOS Safari, Chrome Android, and iPad. */
+  /* ── Touch scroll: DISABLED -- see docs/ai/mistakes.md 2026-07-29-018 ──
+     This used to dispatch a synthetic WheelEvent on .xterm per touchmove
+     step, on the theory that xterm.js's own wheel handler would scroll its
+     client-side scrollback buffer (xterm.js has no built-in touch scroll,
+     issue #5377). Rigorous mobile stress-testing found that theory to be
+     wrong for THIS app in a way that actively corrupts the screen: every
+     session here runs inside tmux (a hard architectural invariant, see
+     CLAUDE.md), and tmux repaints its pane as a fixed-size display,
+     managing history entirely on the server side -- it never feeds
+     xterm.js's own client buffer, so `buffer.active.length` never grows
+     past `rows` no matter how much output streams through. That means
+     there is NEVER any client-side scrollback for a wheel event to
+     scroll into, so xterm.js's wheel handler falls through to ITS
+     documented fallback for "nothing left to scroll": sending literal
+     Up/Down-arrow key ESCAPE SEQUENCES to the PTY as real input. Those
+     bytes reach whatever is running in the foreground, and if it isn't
+     reading stdin (e.g. any non-interactive long-running command), the
+     tty's own local echo prints them back as literal, repeated "^[[A"
+     garbage mixed into live output -- this happened on EVERY touch-scroll
+     gesture tested, not just an edge case. Re-enabling any client-side
+     scroll gesture here would need to drive tmux's own copy-mode/history
+     instead of xterm.js's (which is what the MCP `scroll_buffer` tool
+     already does server-side, see server/mcp/tmux.js) -- tracked as a
+     follow-up, not implemented here. touchmove's preventDefault() is kept
+     to still suppress iOS's page-bounce overscroll effect. */
   function initTouchScroll() {
     var xterm = document.querySelector('.xterm');
-    var vp    = document.querySelector('.xterm-viewport');
-    if (!xterm || !vp) { setTimeout(initTouchScroll, 400); return; }
-
-    var lastY = 0;
-
-    xterm.addEventListener('touchstart', function (e) {
-      if (e.touches.length !== 1) return;
-      lastY = e.touches[0].clientY;
-    }, { passive: true });
+    if (!xterm) { setTimeout(initTouchScroll, 400); return; }
 
     xterm.addEventListener('touchmove', function (e) {
       if (e.touches.length !== 1) return;
-      e.preventDefault();             /* suppress iOS page-bounce */
-      var y     = e.touches[0].clientY;
-      var delta = (lastY - y) * 3;   /* px delta; ×3 for comfortable sensitivity */
-      lastY = y;
-      /* Dispatch on .xterm (outer element) so xterm.js mouse-reporting mode
-         picks it up and forwards to tmux as scroll sequences. Bubbles:true
-         means a dispatch on vp also reaches this listener, but targeting
-         xterm directly is more reliable across xterm.js versions. */
-      xterm.dispatchEvent(new WheelEvent('wheel', {
-        deltaY:    delta,
-        deltaMode: WheelEvent.DOM_DELTA_PIXEL,
-        bubbles:   true,
-        cancelable: true,
-      }));
-    }, { passive: false });           /* passive:false required to call preventDefault */
-
-    xterm.addEventListener('touchend', function () {
-      lastY = 0;
-    }, { passive: true });
+      e.preventDefault();
+    }, { passive: false });
   }
   setTimeout(initTouchScroll, 800);
 })();

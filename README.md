@@ -365,6 +365,63 @@ undiscovered bugs, all now fixed:
 |---|---|
 | ![Toolbar scrolled fully right with the circular Back button completely covering the A+ button, making it untappable](docs/assets/toolbar-overlap-bug-before-fix.png) | ![Toolbar scrolled fully right with the A+ button fully visible and clear of the Back button](docs/assets/screenshot-android-toolbar-scrolled.png) |
 
+### Concurrent-interaction stress testing
+
+Beyond static rendering, `tests/specs/android-mobile-stress.spec.js` (8 tests) validates
+the terminal under realistic *concurrent* mobile interaction — typing, scrolling,
+rotating the device, and toggling the on-screen keyboard, all while a long-running
+foreground process is actively streaming output, the exact condition of chatting with
+an AI CLI on a phone. Rather than downloading a local model, these tests drive
+`scripts/simulate-model-stream.mjs` — a small deterministic script that writes wrapping
+prose to stdout word-by-word with a real per-word delay, producing the same "small
+chunks arriving continuously over real time" traffic pattern a live model would,
+without the network dependency, cost, or non-determinism of a real API call on every
+test run. (One manual spot-check against the `claude` CLI confirmed the traffic-pattern
+theory and, interestingly, found `claude -p` doesn't incrementally stream to a
+non-interactive terminal at all — it prints nothing for several seconds, then dumps its
+whole response at once — see `docs/ai/decision-log.md`.)
+
+Scenarios covered: scrolling and typing during an active stream, device rotation
+(portrait → landscape → portrait) with the on-screen keyboard held "open", rapid Fn-row
+and zoom toggling mid-stream, CTRL+C interrupting a stream via the toolbar, and tapping
+Back mid-stream then re-Joining to confirm the stream completed cleanly server-side
+(tmux keeps running after the browser tab navigates away). Two more tests were added to
+`android-mobile-ux.spec.js` specifically for touch-target precision and on-screen-keyboard
+reflow: a touch-drag-vs-tap regression test, and an exhaustive keyboard-toggle test (10
+open/close cycles back to back).
+
+| Rotated to landscape, keyboard "open", mid-stream | Fn row expanded mid-stream | Zoomed in mid-stream | On-screen keyboard "open" reflow |
+|---|---|---|---|
+| ![Terminal in landscape orientation with the toolbar and streaming text correctly reflowed](docs/assets/screenshot-android-stress-rotation-landscape.png) | ![Fn row expanded below the toolbar while streaming text continues to render correctly underneath](docs/assets/screenshot-android-stress-fn-toggle-mid-stream.png) | ![Terminal zoomed in to a larger font size while streaming text continues to render correctly](docs/assets/screenshot-android-stress-zoom-mid-stream.png) | ![Terminal reflowed to a shorter height simulating the on-screen keyboard opening, with text typed before and after the reflow both rendering correctly](docs/assets/screenshot-android-stress-keyboard-open-reflow.png) |
+
+This testing found two more real, previously-undiscovered bugs, both now fixed:
+
+1. **Touch-scrolling the terminal could spam literal `^[[A` (Up-arrow key) garbage into
+   visible output.** Every NomadTTY session runs inside tmux, which manages pane
+   history entirely server-side and never populates xterm.js's own client-side
+   scrollback buffer — confirmed directly (`window.term.buffer.active.length` never
+   grows past the row count no matter how much output streams through). With zero
+   client-side scrollback ever available, *every* touch-scroll gesture hit xterm.js's
+   own fallback for "nothing left to scroll": sending real Up/Down-arrow key escape
+   sequences to the PTY as client input. If the foreground process isn't reading stdin
+   (like a streaming AI reply), the tty's own local echo prints those bytes straight
+   back as repeated garbage text mixed into live output. Fixed by disabling the
+   touch-scroll gesture entirely (it never provided real functionality here in the
+   first place) — scrollback remains fully available via the MCP `scroll_buffer` tool,
+   which reads tmux's own history correctly and is unaffected. See mistakes.md
+   2026-07-29-018 and decision-log.md for the full investigation.
+2. **Toolbar buttons fired on a drag, not just a tap.** A touch that started on a
+   button (e.g. CTRL) and dragged 150px sideways before lifting — exactly what
+   swiping the toolbar's scrollable row to see more buttons feels like — still
+   registered as a press. Fixed with a capture-phase gesture-distance guard on `#kb`:
+   drags past a small threshold no longer reach any button's handler, while a
+   genuine, near-stationary tap (even with a few pixels of natural finger jitter)
+   still works exactly as before. See mistakes.md 2026-07-29-019.
+
+| Screen distortion — before the fix | Clean, distortion-free — after the fix |
+|---|---|
+| ![Streamed text with dozens of literal caret-bracket-A garbage sequences corrupting the output, caused by touch-scroll leaking arrow-key escapes into the PTY](docs/assets/scroll-distortion-bug-before-fix.png) | ![The same streaming scenario after the fix, rendering cleanly with no garbage text anywhere](docs/assets/screenshot-android-stress-scroll-while-streaming.png) |
+
 ### Quick start
 
 ```bash

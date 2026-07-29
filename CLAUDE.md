@@ -49,6 +49,15 @@ NomadTTY is a mobile-friendly web terminal, with two parallel deployment models 
   container (e.g. `#back-btn` over `#kb`'s toolbar row) must have its footprint reserved
   as padding/margin in that container, not just checked at one scroll position. See
   mistakes.md [2026-07-29-017].
+- The terminal's touch-scroll gesture is intentionally disabled (`initTouchScroll` in
+  `src/kb.js` only calls `preventDefault()`, never dispatches a wheel event) — tmux never
+  feeds xterm.js's client-side scrollback, so every dispatch used to leak Up/Down-arrow
+  key escapes into the PTY as real input. Do not re-enable wheel dispatch there without
+  driving tmux's own copy-mode/history instead. See mistakes.md [2026-07-29-018].
+- Any element that fires its action directly from `touchend` (not from the browser's own
+  click synthesis) must measure gesture distance and suppress the action past a small
+  drag threshold, or a scroll/swipe gesture will register as a tap. See mistakes.md
+  [2026-07-29-019] (`src/kb.js`'s `#kb`-level touch-drag guard).
 
 ## Key files
 | File | Role |

@@ -17,6 +17,46 @@
 
 ---
 
+### [2026-07-29] Concurrent-interaction stress testing found and fixed a real screen-distortion bug and a real accidental-button-press bug
+- **Timestamp**: 2026-07-29 07:20 UTC
+- **Change**:
+  - `src/kb.js`: disabled the terminal's touch-scroll wheel dispatch entirely (`initTouchScroll` now only
+    calls `preventDefault()` on touchmove for iOS bounce suppression) — it always leaked Up/Down-arrow key
+    escape sequences into the PTY as real input, since tmux never populates xterm.js's own client-side
+    scrollback (every session runs inside tmux, a hard invariant). Added a capture-phase touch-drag guard
+    on `#kb` so toolbar buttons no longer fire when a touch drags 150px+ across them (only a genuine,
+    near-stationary tap registers) — a swipe used to scroll the toolbar row could otherwise trigger
+    whatever button the finger started or passed over.
+  - Added `scripts/simulate-model-stream.mjs` — a deterministic word-by-word streaming-text generator used
+    by the new stress suite in place of a real downloaded local model (see decision-log.md).
+  - Added `tests/helpers/stress.js` (`startStream`, `touchScrollTerminal`, `toggleOnScreenKeyboard`,
+    `rotateDevice`, `collectPageErrors`) and `tests/specs/android-mobile-stress.spec.js` (8 tests):
+    scrolling/typing during an active stream, device rotation with the on-screen keyboard simulated open,
+    rapid Fn-row/zoom toggling during a stream, CTRL+C interrupting a stream via the toolbar, and tapping
+    Back mid-stream then re-Joining. Added 2 more tests to `tests/specs/android-mobile-ux.spec.js`: a
+    touch-drag-vs-tap regression test, and an exhaustive on-screen-keyboard-toggle reflow test.
+  - `tests/helpers/ws-capture.js`: `waitForOutputLine()` now strips ANSI/VT escape sequences (and converts
+    tmux's `ESC[<N>S` Scroll-Up sequences into real newlines first) before matching, since tmux can express
+    a line landing at the bottom of the pane purely via cursor repositioning/scrolling with no literal
+    `\r\n` byte anywhere in the stream — the old strict-newline check produced false-timeout failures on
+    otherwise-correct output under this suite's heavier bottom-of-pane scroll load.
+  - Captured new documentation screenshots (`docs/assets/screenshot-android-stress-*.png`) via
+    `scripts/capture-android-stress-screenshots.mjs`, including a before/after pair showing the touch-scroll
+    distortion and its fix.
+- **Rationale**: Asked to rigorously stress-test mobile rendering under realistic concurrent-interaction
+  conditions (typing/scrolling/rotating/toggling the keyboard while an AI-CLI-style stream is active) and to
+  specifically verify no screen text distortion occurs and no accidental button presses occur from
+  drag/scroll gestures. Both explicit asks turned up real, previously-undiscovered, always-reproducible bugs
+  (not edge cases) — see mistakes.md 2026-07-29-018 and 2026-07-29-019 for full root-cause detail.
+- **Affected areas**: `src/kb.js`, `scripts/simulate-model-stream.mjs` (new), `scripts/capture-android-stress-screenshots.mjs`
+  (new), `tests/helpers/stress.js` (new), `tests/specs/android-mobile-stress.spec.js` (new),
+  `tests/specs/android-mobile-ux.spec.js`, `tests/helpers/ws-capture.js`, `tests/README.md`,
+  `.claude/rules/tests.md`, `CLAUDE.md`, `docs/ai/mistakes.md`, `docs/ai/decision-log.md`
+- **Related commit**: "test: implement rigorous android simulator testing and capture mobile screenshots"
+- **Related decisions**: 2026-07-29 "Touch-scroll-into-history is disabled...", 2026-07-29 "Mobile stress
+  tests use a deterministic word-stream script instead of a downloaded local LLM"
+- **Related mistakes**: 2026-07-29-018, 2026-07-29-019
+
 ### [2026-07-29] Rigorous mobile UX validation via Playwright device emulation; two real mobile bugs found and fixed
 - **Timestamp**: 2026-07-29 06:40 UTC
 - **Change**:

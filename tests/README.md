@@ -87,10 +87,28 @@ manual server startup is needed.
   touch-specific interactions (CTRL modifier + physical key, Fn row toggle, zoom).
   This file exists to catch defects invisible at desktop `devicePixelRatio=1` —
   it directly caught the renderer bug in `docs/ai/mistakes.md` 2026-07-29-014
-  (which prompted writing it), and, once written, also caught two further
+  (which prompted writing it), and, once written, also caught three further
   real bugs neither of the other suites could have reached: 2026-07-29-016
-  (a modifier-key double-send) and 2026-07-29-017 (the Back button covering the
-  toolbar's own "A+" button at full scroll).
+  (a modifier-key double-send), 2026-07-29-017 (the Back button covering the
+  toolbar's own "A+" button at full scroll), and 2026-07-29-019 (toolbar buttons
+  firing on a drag/swipe, not just a stationary tap).
+- `specs/android-mobile-stress.spec.js` — concurrent-interaction stress testing,
+  also on the Pixel 7 profile: typing while scrolling, scrolling while a
+  long-running foreground process actively streams output (see
+  `scripts/simulate-model-stream.mjs` and `docs/ai/decision-log.md` for why a
+  deterministic script stands in for a real AI CLI/model here), typing while
+  streaming, device rotation with the on-screen keyboard simulated open, and
+  keyboard-toggle/Fn-row/zoom stress *during* an active stream, plus a
+  CTRL+C-interrupts-a-stream test and a Back-mid-stream-then-rejoin test. This
+  file is what surfaced 2026-07-29-018 — touch-scroll spamming Up/Down-arrow
+  escape sequences into the PTY as real input on every gesture, corrupting
+  visible output — caught by literally looking at a mid-stress screenshot, not
+  just by a passing/failing assertion (the initial version of these tests
+  didn't check for it and would have passed regardless).
+  `tests/helpers/stress.js` holds the shared helpers (`startStream`,
+  `touchScrollTerminal`, `toggleOnScreenKeyboard`, `rotateDevice`,
+  `collectPageErrors`) used by both this file and the touch-sensitivity /
+  keyboard-toggle-reflow tests added to `android-mobile-ux.spec.js`.
 
 ## Test isolation
 
