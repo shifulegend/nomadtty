@@ -1,0 +1,11 @@
+# The repo-root .gitignore ignores `package.json`/`package-lock.json` at any
+# depth (its own dependency-less-repo convention), which would also hide
+# this test suite's manifest. Un-ignore just those two files here — this
+# suite is the one place in the repo that legitimately needs npm deps.
+!package.json
+!package-lock.json
+
+node_modules/
+test-results/
+playwright-report/
+blob-report/

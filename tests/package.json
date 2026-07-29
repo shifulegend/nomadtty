@@ -1,0 +1,14 @@
+{
+  "name": "nomadtty-e2e-tests",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Playwright end-to-end suite for NomadTTY's Session Manager and terminal. Lives entirely under tests/ — never touches application source.",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1"
+  }
+}
