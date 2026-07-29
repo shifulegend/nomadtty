@@ -402,6 +402,22 @@ scenarios, each pairing a keyboard open/close reflow with a distinct concurrent 
    Session Manager itself still renders usably in a reduced/transitioning viewport, and
    the stream (running server-side regardless of the browser tab) completed cleanly.
 
+| 1. Rapid open/close cycles | 2. Typing mid-transition | 3. Keyboard + Fn row |
+|---|---|---|
+| ![Streaming text rendering cleanly after 4 rapid keyboard open/close cycles](docs/assets/screenshot-keyboard-toggle-1-rapid-cycles.png) | ![Typed command text visibly interleaved with concurrent stream output as both write to the terminal at once -- expected concurrent-write behavior, not corruption](docs/assets/screenshot-keyboard-toggle-2-typing-mid-transition.png) | ![Fn row expanded and the terminal reflowed to the shorter keyboard-open height at the same time, both rendering correctly](docs/assets/screenshot-keyboard-toggle-3-keyboard-plus-fn.png) |
+
+| 4. Keyboard + zoom | 5. Keyboard + scroll gesture | 6. Back during keyboard-open |
+|---|---|---|
+| ![Terminal zoomed in slightly (1.3x) and reflowed to the keyboard-open height at the same time, rendering correctly](docs/assets/screenshot-keyboard-toggle-4-keyboard-plus-zoom.png) | ![Streaming text rendering cleanly after a scroll gesture while the keyboard is open -- no arrow-key garbage](docs/assets/screenshot-keyboard-toggle-5-keyboard-plus-scroll.png) | ![Session Manager list rendering correctly at the reduced keyboard-open viewport height right after tapping Back](docs/assets/screenshot-keyboard-toggle-6-back-during-keyboard-open.png) |
+
+Scenario 2's screenshot is worth reading closely: the typed command's text is visibly
+chopped up and interleaved with the stream's own concurrently-arriving words (e.g.
+"port erosion**echo type** deposition**d_during_** tidal**ke**"). That's real Unix
+terminal behavior, not distortion -- two processes writing to the same terminal at the
+same instant get interleaved byte-for-byte, exactly as a real shell would show it. The
+test itself doesn't check the mid-typing frame; it waits for the command to actually
+finish executing and echo its own complete, uninterrupted result line afterward.
+
 Two more tests were added to `android-mobile-ux.spec.js` specifically for touch-target
 precision and on-screen-keyboard reflow outside of an active stream: a touch-drag-vs-tap
 regression test, and an exhaustive keyboard-toggle test (10 open/close cycles back to
