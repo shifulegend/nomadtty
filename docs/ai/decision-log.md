@@ -15,6 +15,54 @@
 
 ---
 
+### [2026-07-29] terminal.pz.net cut over from the legacy single-ttyd model to Session Manager + MCP, live
+- **Context**: Repo history had drifted into 6 unmerged remote branches (a full architecture
+  rewrite plus 4 dependabot bumps) that were never fetched locally. User asked to merge
+  everything into main and deploy it live to `terminal.pz.net`, with the MCP server
+  reachable from both LAN and Tailscale for AI-agent use.
+- **Decision**: Merged `feature/agentic-mcp-overhaul` and `claude/nomadtty-playwright-tests-b2q3wo`
+  (the latter is a superset/descendant of the former) plus all 4 dependabot branches into
+  `main` (all fast-forward or conflict-free three-way merges — no manual conflict
+  resolution needed). Added the missing `systemd/nomadtty.service` unit (the branches
+  shipped the new `server/main.js` architecture but never wired it into deployment — their
+  own `.claude/rules/config.md` flagged this as a known gap). Deployed it live: rewrote
+  both nginx files that route `terminal.pz.net` (`/etc/nginx/sites-available/ttyd` for the
+  public :80 path, and only the `terminal.pz.net` block inside the shared, untracked
+  `/etc/nginx/sites-available/tailscale-router` for the Tailscale :18790 path — every other
+  block in that file, including `accounts.pz.net`'s financial MCP app, was left untouched)
+  to proxy to the new session-manager on :4000 instead of ttyd:47821 directly. Disabled the
+  old `ttyd.service`. MCP server deployed bound to `0.0.0.0:4200` with a generated
+  `MCP_AUTH_TOKEN` (stored in `/etc/nomadtty/nomadtty.env`, chmod 600) per explicit request
+  for LAN+Tailscale AI-agent reachability — not proxied through nginx, so it sits outside
+  Tailscale Serve's TLS termination and outside nginx's per-domain dispatch entirely.
+- **Alternatives considered**: Merging only the dependabot bumps and leaving the
+  architecture rewrite for separate review (rejected — user wanted the newest features
+  live now). Keeping the MCP server loopback-only (rejected — user explicitly wants
+  cross-device AI-agent access over LAN/Tailscale, and the code's own boot-security check
+  already requires a bearer token before it will allow a non-loopback bind, so this isn't
+  the code's default-insecure path). Enabling `ufw` on this box as defense-in-depth for the
+  MCP port (rejected — `ufw` is currently inactive; turning it on fresh risks breaking every
+  other tenant's open port on this shared box and is out of scope for a NomadTTY-focused
+  change).
+- **Rationale**: User made each call explicitly after being shown the actual risk (shared
+  multi-tenant nginx file, MCP bearer-token requirement, blast radius) via clarifying
+  questions before any live change was made.
+- **Consequences**: `install.sh`/`Dockerfile`/`docker-entrypoint.sh` remain **not** wired to
+  this architecture (same known gap the merged branches already had) — only this specific
+  host's bare-metal systemd deployment was updated, not the installer/Docker paths. Per-session
+  ttyd/tmux processes spawned by the session-manager do **not** survive a `nomadtty.service`
+  restart (`shutdownAllSessions()` tears them down deliberately on SIGTERM/SIGINT) — this is
+  a different lifecycle model from the old single persistent `main` session and should be
+  communicated before any future restart of this service. AWS Security Group exposure of
+  port 4200 beyond LAN/Tailscale could not be verified from inside this host (no AWS
+  credentials available in this environment) — flagged to the user as a residual item to
+  confirm separately. See `~/INFRA.md` for the updated port registry/routing map, and
+  `docs/ai/mistakes.md` [2026-07-29-022] for an unrelated but concurrent incident (the old
+  `ttyd.service`'s `main` tmux session was destroyed, not just made unreachable, when that
+  unit was stopped as part of this cutover).
+- **Owner**: User (via explicit AskUserQuestion responses on merge scope, live cutover,
+  branch deletion, MCP exposure, and the existing "main" session's fate).
+
 ### [2026-07-29] Branding/SEO overhaul targets the Session Manager model, not the legacy nginx sub_filter model
 - **Context**: Task required updating page titles, favicons, manifest, meta description,
   theme-color, Open Graph, Twitter Card, and robots directives across all routes. Two

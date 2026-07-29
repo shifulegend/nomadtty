@@ -17,6 +17,41 @@
 
 ---
 
+### [2026-07-29] Merged all pending branches into main; cut terminal.pz.net over to Session Manager + MCP
+- **Timestamp**: 2026-07-29 14:00-15:00 UTC
+- **Change**: Merged `feature/agentic-mcp-overhaul` and `claude/nomadtty-playwright-tests-b2q3wo`
+  (fast-forward, no conflicts) plus all 4 `dependabot/*` branches (clean 3-way merges) into
+  `main`; pushed; deleted all 6 branches from origin. Added `systemd/nomadtty.service` (new
+  file, not previously shipped by any branch). On the live host: wrote
+  `/etc/nomadtty/nomadtty.env` (SESSION_MANAGER_PORT=4000, TTYD_BASE_PORT=47900,
+  MCP_PORT=4200, MCP_HOST=0.0.0.0, generated MCP_AUTH_TOKEN), installed/enabled
+  `nomadtty.service`, disabled `ttyd.service`, and rewrote the `location /` block in both
+  `/etc/nginx/sites-available/ttyd` and (surgically, only the `terminal.pz.net` block) the
+  shared `/etc/nginx/sites-available/tailscale-router` to proxy to `127.0.0.1:4000` instead
+  of `ttyd:47821` directly.
+- **Rationale**: See `docs/ai/decision-log.md`'s 2026-07-29 "terminal.pz.net cut over"
+  entry for the full context and the explicit user decisions behind each choice.
+- **Affected areas**: `main` branch history (34 commits merged in), `systemd/nomadtty.service`
+  (new), `docs/ai/mistakes.md`, `docs/ai/decision-log.md`, live host config outside this repo
+  (`/etc/nginx/sites-available/ttyd`, `/etc/nginx/sites-available/tailscale-router`,
+  `/etc/systemd/system/nomadtty.service`, `/etc/nomadtty/nomadtty.env`), `~/INFRA.md`.
+- **Verification**: `docker build` succeeded (validates the Ubuntu 24.04→26.04 Dockerfile
+  bump — ttyd installs fine via apt on 26.04); `shellcheck install.sh` clean; `nginx -t`
+  passed before each reload; diffed `tailscale-router` before/after to confirm only the
+  `terminal.pz.net` block changed (support/logs/browser/files/accounts/openclaw blocks
+  byte-for-byte identical); `curl` against both the public (:80) and Tailscale (:18790)
+  paths confirmed the new Session Manager UI is served; `ss -tlnp` confirmed
+  `nomadtty.service`'s two listeners (4000 loopback, 4200 all-interface) are up and the MCP
+  boot-security check passed (it logged its normal startup line rather than refusing to
+  bind, confirming `MCP_AUTH_TOKEN` was read correctly). Playwright suite run twice
+  (34/55 passing after fixing a stale-browser-binary mismatch on the first run) — see
+  `docs/ai/mistakes.md` if the remaining 21 failures are later confirmed as a real
+  regression rather than load-related timeouts; full end-to-end session-creation and MCP
+  auth verification still pending at the time of this entry.
+- **Related decisions**: `docs/ai/decision-log.md` [2026-07-29] "terminal.pz.net cut over..."
+- **Related mistakes**: `docs/ai/mistakes.md` [2026-07-29-022] (old `ttyd.service`'s `main`
+  tmux session destroyed when the unit was stopped, not just made unreachable)
+
 ### [2026-07-29] Footer changed from sticky-after-content to a true fixed, always-visible bottom bar
 - **Timestamp**: 2026-07-29 13:15 UTC
 - **Change**: User reported "the footer got overwritten when the sessions overflowed" and, after clarification via `AskUserQuestion`, confirmed the actual requirement was that the footer be *persistently* visible at the bottom of the screen (never requiring a scroll to see it) -- not the flex/`margin-top:auto` sticky-footer behavior shipped in the two prior commits, which only appeared after scrolling to the end of a list long enough to fill the viewport. Changed `#sm-footer` to `position:fixed;left:0;right:0;bottom:0` (the same pattern already used by `src/kb.js`'s `#kb` toolbar and `#back-btn`), added its own background + `border-top` for visual separation from the scrolling content, and reserved `padding-bottom:calc(50px + env(safe-area-inset-bottom))` on `#sm-root` so the session list can fully scroll clear of the footer's footprint rather than being covered by it. Removed the now-unnecessary `min-height:100dvh`/flex-column/`margin-top:auto` machinery from `#sm-root`.
