@@ -17,6 +17,24 @@
 
 ---
 
+### [2026-07-29] Copyright footer added to the Session Manager screen
+- **Timestamp**: 2026-07-29 12:05 UTC
+- **Change**: Added `#sm-footer` (`&copy; 2026 shifulegend — NomadTTY`) to the bottom of
+  `public/session-manager.html`'s `#sm-root`, reusing the exact copyright holder already
+  established in `LICENSE`/`NOTICE` rather than inventing new attribution text.
+- **Rationale**: User asked whether a copyright notice can be shown without registering
+  it anywhere -- yes: copyright protection and the right to display a notice both arise
+  automatically upon creation of an original work (Berne Convention); registration is
+  optional and only needed for certain enhanced remedies (e.g. US statutory damages),
+  never for the notice itself.
+- **Affected areas**: `public/session-manager.html`, `docs/assets/screenshot-session-manager-mobile.png`
+  (regenerated to reflect the new footer)
+- **Verification**: Live server boot + curl confirmed the footer markup renders; a
+  Playwright screenshot at the Pixel 7 mobile viewport confirmed zero horizontal
+  overflow and correct centered placement below `#empty-state`, not overlapping any
+  other element. Temporary verification spec deleted afterward; not committed.
+- **Related decisions**: none new -- reuses the existing `LICENSE`/`NOTICE` copyright holder.
+
 ### [2026-07-29] Comprehensive branding, SEO metadata, and favicon/manifest assets added
 - **Timestamp**: 2026-07-29 11:39 UTC
 - **Change**: Added page titles/meta description/theme-color/robots/Open Graph/Twitter
