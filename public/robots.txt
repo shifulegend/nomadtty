@@ -1,0 +1,6 @@
+# NomadTTY is a private, authenticated remote-access tool, not a public
+# site -- there is nothing here for a search engine to usefully index, and
+# session URLs (/term/<id>/) are per-user and ephemeral. Disallow all
+# crawling. See docs/ai/decision-log.md's branding/SEO entry.
+User-agent: *
+Disallow: /

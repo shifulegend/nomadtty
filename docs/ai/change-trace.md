@@ -17,6 +17,59 @@
 
 ---
 
+### [2026-07-29] Comprehensive branding, SEO metadata, and favicon/manifest assets added
+- **Timestamp**: 2026-07-29 11:39 UTC
+- **Change**: Added page titles/meta description/theme-color/robots/Open Graph/Twitter
+  Card tags and favicon/apple-touch-icon/manifest links to `public/session-manager.html`
+  (static) and to `server/session-manager.js`'s `injectToolbar()` (now per-session
+  dynamic, driven by `entry.label` and a server-computed `pageUrl`, with ttyd's own
+  default `<title>`/favicon `<link>` stripped first via regex to avoid duplicates).
+  Added `scripts/generate-icons.mjs` (pure Node core, no new dependency) generating
+  `public/favicon.svg`, `public/apple-touch-icon.png`, `public/icon-192.png`,
+  `public/icon-512.png` -- a ">_" terminal-prompt glyph on the app's `#0052cc` accent
+  blue. Added `public/manifest.webmanifest` and `public/robots.txt`
+  (`noindex, nofollow` + `Disallow: /`, deliberate for a private auth'd tool). Extended
+  `server/session-manager.js`'s `MIME` map and added a `BRANDING_ASSETS` static route
+  list so these new files are served with correct `Content-Type`. Added an
+  `escapeHtml()` helper so the user-supplied session `label` is safely interpolated
+  into injected HTML (title, og:title).
+- **Rationale**: Explicit task requirement for a holistic branding/SEO update across
+  all routes, mobile-first, without disturbing the existing terminal DOM/layout.
+- **Affected areas**: `public/session-manager.html`, `server/session-manager.js`,
+  `scripts/generate-icons.mjs` (new), `public/favicon.svg` (new),
+  `public/apple-touch-icon.png` (new), `public/icon-192.png` (new),
+  `public/icon-512.png` (new), `public/manifest.webmanifest` (new),
+  `public/robots.txt` (new)
+- **Verification**: `node -c server/session-manager.js` syntax check; live server
+  boot; curl checks of all 6 new static routes (200 + correct Content-Type); a live
+  test session's `/term/<id>/` HTML inspected to confirm the injected title/meta/OG
+  tags, escaped label, dynamic `og:url`, and removal of ttyd's own default
+  title/favicon, then the test session deleted. Full Playwright suite
+  (`cd tests && npx playwright test`) re-run: 55/55 passing, no regressions. Ad hoc
+  Playwright screenshots taken at Pixel-7 (mobile) and 1440x900 (desktop) viewports
+  of both `public/session-manager.html` and a live `/term/<id>/` page; each measured
+  `document.documentElement.scrollWidth - clientWidth === 0` (zero horizontal
+  overflow) and was visually inspected -- toolbar, Back button, and terminal
+  alignment all unaffected by the new head-only tags. Temporary verification spec
+  files and test-results were deleted afterward; not committed.
+- **Related commit**: "feat: implement comprehensive branding, SEO metadata, and responsive layout updates"
+- **Related decisions**: [2026-07-29] Branding/SEO overhaul targets the Session Manager
+  model, not the legacy nginx sub_filter model
+
+### [2026-07-29] Adapter sync for branding/SEO change
+- **Timestamp**: 2026-07-29 11:45 UTC
+- **Change**: Added the two new files (`scripts/generate-icons.mjs`,
+  `public/*.{svg,png,webmanifest}` + `robots.txt`) to `CLAUDE.md`'s and
+  `gemini/GEMINI.md`'s "Key files" tables. Added a "Branding & SEO metadata" bullet
+  to `README.md`'s Session Manager features section.
+- **Rationale**: Per `docs/ai/tool-sync-policy.md`, adapter files must not drift from
+  canonical docs/new durable files. `.github/copilot-instructions.md` and `AGENTS.md`
+  were left as-is: neither has a file-level table, and both already predate the
+  Session Manager model entirely (a pre-existing gap, not introduced by this change) —
+  reconciling that is a larger, separate effort out of scope here.
+- **Affected areas**: `CLAUDE.md`, `gemini/GEMINI.md`, `README.md`
+- **Related commit**: "feat: implement comprehensive branding, SEO metadata, and responsive layout updates"
+
 ### [2026-07-29] Added the dedicated on-screen-keyboard-toggle-during-generation test block requested but not fully covered by the prior stress-testing pass
 - **Timestamp**: 2026-07-29 07:45 UTC
 - **Change**: Added 6 new tests to `tests/specs/android-mobile-stress.spec.js`, each pairing an on-screen

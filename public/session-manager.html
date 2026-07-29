@@ -4,6 +4,34 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
   <title>NomadTTY — Session Manager</title>
+  <meta name="description" content="NomadTTY — a mobile-friendly persistent web terminal with a touch keyboard toolbar. Manage terminal sessions from any phone, tablet, or desktop browser.">
+  <meta name="theme-color" content="#0b0b0c">
+  <!-- Private, authenticated tool -- not meant to be search-indexed; see public/robots.txt. -->
+  <meta name="robots" content="noindex, nofollow">
+
+  <!-- Open Graph / Twitter Card: for link-preview unfurling (e.g. sharing a
+       session URL in Slack/email), independent of the noindex directive
+       above, which only concerns search-engine crawlers, not link-preview
+       bots. No og:url: this static file has no single canonical URL across
+       deployments (Tailscale hostname, custom domain, etc.) — see
+       docs/ai/engineering-rules.md's no-hardcoding rule. -->
+  <meta property="og:title" content="NomadTTY — Session Manager">
+  <meta property="og:description" content="A mobile-friendly persistent web terminal with a touch keyboard toolbar.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="/icon-512.png">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="NomadTTY — Session Manager">
+  <meta name="twitter:description" content="A mobile-friendly persistent web terminal with a touch keyboard toolbar.">
+  <meta name="twitter:image" content="/icon-512.png">
+
+  <!-- Favicons + mobile "Add to Home Screen" branding -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="mask-icon" href="/favicon.svg" color="#0052cc">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="NomadTTY">
   <style>
     /* ── DESIGN.md compliance ──
        Monospace only, near-black background, single blue accent,

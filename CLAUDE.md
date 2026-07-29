@@ -70,6 +70,8 @@ NomadTTY is a mobile-friendly web terminal, with two parallel deployment models 
 | `server/session-manager.js` | Multi-session ttyd/tmux orchestration + UI/API + terminal proxy |
 | `server/mcp/**` | MCP Streamable HTTP server: tools.js, tmux.js, validation.js, auth.js, index.js |
 | `server/main.js` | Composition root: session-manager + MCP together |
+| `public/*.{svg,png,webmanifest}`, `public/robots.txt` | Favicon/icons/manifest/robots — branding+SEO assets served by `server/session-manager.js` (see `docs/ai/decision-log.md`'s 2026-07-29 branding entry) |
+| `scripts/generate-icons.mjs` | Regenerates the favicon/icon PNGs+SVG from shared glyph geometry (pure Node core, no deps) |
 | `docs/ai/` | Canonical shared project memory (read before coding) |
 | `.claude/rules/` | Detailed Claude-specific rule files |
 

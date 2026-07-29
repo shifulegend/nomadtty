@@ -37,6 +37,8 @@ Stack: vanilla JS · bash · nginx config · Docker · systemd.
 | `systemd/ttyd.service` | ttyd with tmux persistence |
 | `Dockerfile` | Multi-arch ubuntu:24.04 image |
 | `install.sh` | Debian/Ubuntu one-command installer |
+| `public/*.{svg,png,webmanifest}`, `public/robots.txt` | Favicon/icons/manifest/robots — branding+SEO assets (see `docs/ai/decision-log.md`'s 2026-07-29 branding entry) |
+| `scripts/generate-icons.mjs` | Regenerates favicon/icon assets (pure Node core, no deps) |
 | `docs/ai/` | Canonical shared project memory |
 | `.agents/rules/` | Detailed Antigravity rule files |
 | `.agents/workflows/` | Reusable Antigravity workflows |

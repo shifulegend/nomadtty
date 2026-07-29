@@ -162,8 +162,12 @@ function listSessions() {
   }));
 }
 
-/* ── Static file serving (Session Manager UI) ── */
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
+/* ── Static file serving (Session Manager UI + branding assets) ── */
+const MIME = {
+  '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
+  '.svg': 'image/svg+xml', '.png': 'image/png',
+  '.webmanifest': 'application/manifest+json', '.txt': 'text/plain',
+};
 function serveStatic(res, filePath) {
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(404); res.end('Not found'); return; }
@@ -173,22 +177,55 @@ function serveStatic(res, filePath) {
   });
 }
 
-/* ── HTML injection (kb.js toolbar) equivalent to old nginx sub_filter ──
- * Only applied to text/html responses proxied from a session's ttyd. */
-function injectToolbar(html) {
+/** Escapes a string for safe interpolation into an HTML attribute/text
+ * context -- used for the session label, which is user-supplied (see
+ * createSession) and ends up in the injected <title>. */
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+/* ── HTML injection (kb.js toolbar + branding/SEO metadata) equivalent to
+ * old nginx sub_filter -- only applied to text/html responses proxied from
+ * a session's ttyd. `label` and `pageUrl` (the request's own absolute URL,
+ * for a per-request og:url -- see public/session-manager.html for why the
+ * static Session Manager page omits it) personalize the injected <title>
+ * and Open Graph tags per terminal session. ttyd's own default <title> and
+ * favicon <link> are stripped first so ours are the only ones present --
+ * leaving both in place would leave two competing tags rather than a clean
+ * override. */
+function injectToolbar(html, label, pageUrl) {
+  const title = `NomadTTY — ${label ? escapeHtml(label) : 'Terminal'}`;
   const inject =
+    `<title>${title}</title>` +
     '<meta name="viewport" content="width=device-width,initial-scale=1,' +
     'maximum-scale=1,user-scalable=no,interactive-widget=resizes-content">' +
+    '<meta name="description" content="A live NomadTTY terminal session -- a mobile-friendly persistent web terminal with a touch keyboard toolbar.">' +
+    '<meta name="theme-color" content="#0b0b0c">' +
+    '<meta name="robots" content="noindex, nofollow">' +
+    `<meta property="og:title" content="${title}">` +
+    '<meta property="og:type" content="website">' +
+    '<meta property="og:image" content="/icon-512.png">' +
+    (pageUrl ? `<meta property="og:url" content="${escapeHtml(pageUrl)}">` : '') +
+    '<link rel="icon" type="image/svg+xml" href="/favicon.svg">' +
+    '<link rel="apple-touch-icon" href="/apple-touch-icon.png">' +
+    '<link rel="manifest" href="/manifest.webmanifest">' +
+    '<meta name="apple-mobile-web-app-capable" content="yes">' +
+    '<meta name="apple-mobile-web-app-title" content="NomadTTY">' +
     '<script>!function(){var O=window.WebSocket;function H(u,p){' +
     'var w=p?new O(u,p):new O(u);if(u&&u.indexOf("/ws")>=0)window._S=w;' +
     'return w}H.prototype=O.prototype;H.CONNECTING=0;H.OPEN=1;H.CLOSING=2;' +
     'H.CLOSED=3;window.WebSocket=H}();</script>' +
     '<script src="/kb.js" defer></script>';
-  return html.replace('<head>', '<head>' + inject);
+  return html
+    .replace(/<title>.*?<\/title>/i, '') // ttyd's own default title
+    .replace(/<link\s+rel=["']icon["'][^>]*>/i, '') // ttyd's own default favicon
+    .replace('<head>', '<head>' + inject);
 }
 
 /* ── Reverse proxy: HTTP ── */
-function proxyHttp(req, res, port, onDone) {
+function proxyHttp(req, res, port, label, onDone) {
   const upstream = http.request({
     host: '127.0.0.1', port,
     path: req.url, method: req.method,
@@ -199,7 +236,9 @@ function proxyHttp(req, res, port, onDone) {
       const chunks = [];
       upRes.on('data', (c) => chunks.push(c));
       upRes.on('end', () => {
-        const body = injectToolbar(Buffer.concat(chunks).toString('utf8'));
+        const host = req.headers.host;
+        const pageUrl = host ? `${req.socket.encrypted ? 'https' : 'http'}://${host}${req.url}` : null;
+        const body = injectToolbar(Buffer.concat(chunks).toString('utf8'), label, pageUrl);
         const headers = Object.assign({}, upRes.headers);
         headers['content-length'] = Buffer.byteLength(body);
         res.writeHead(upRes.statusCode, headers);
@@ -293,13 +332,20 @@ const server = http.createServer((req, res) => {
   if (p === '/' || p === '/index.html') return serveStatic(res, path.join(PUBLIC_DIR, 'session-manager.html'));
   if (p === '/session-manager.js') return serveStatic(res, path.join(PUBLIC_DIR, 'session-manager.js'));
 
+  // Branding/SEO static assets -- see docs/ai/decision-log.md.
+  const BRANDING_ASSETS = [
+    'favicon.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png',
+    'manifest.webmanifest', 'robots.txt',
+  ];
+  if (BRANDING_ASSETS.includes(p.slice(1))) return serveStatic(res, path.join(PUBLIC_DIR, p.slice(1)));
+
   const termMatch = p.match(/^\/term\/([a-f0-9]+)(\/.*)?$/);
   if (termMatch) {
     const id = termMatch[1];
     const entry = sessions.get(id);
     if (!entry) { res.writeHead(404); return res.end('Session not found'); }
     entry.lastJoinedAt = Date.now();
-    return proxyHttp(req, res, entry.port);
+    return proxyHttp(req, res, entry.port, entry.label);
   }
 
   res.writeHead(404);
