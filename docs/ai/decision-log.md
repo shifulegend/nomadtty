@@ -15,6 +15,37 @@
 
 ---
 
+### [2026-07-29] New tmux sessions start in the deploy user's home directory, not the repo checkout
+- **Context**: User reported every new terminal session opens with cwd
+  `/home/ubuntu/nomadtty` (this app's own repo checkout) instead of
+  somewhere a user would actually expect a fresh shell to start. Root
+  cause: `spawnSession()`'s `tmux new-session -d -s <id>` call never passed
+  `-c <dir>`, so tmux silently inherited the CWD of the Session Manager
+  process itself (wherever `node server/main.js` was launched from --
+  effectively `systemd/nomadtty.service`'s `WorkingDirectory`).
+- **Decision**: `spawnSession()` now passes `-c $SESSION_START_DIR`, a new
+  module-level constant computed from `SESSION_MANAGER_START_DIR` (env var)
+  falling back to `os.homedir()` (the deploy user's home -- matches
+  ordinary terminal-emulator convention), with a final fallback to the repo
+  root if the configured/resolved directory doesn't actually exist on disk
+  (a bad env var must not break session creation entirely).
+- **Alternatives considered**: Hardcoding `/root` or `/home/<user>` directly
+  -- rejected, violates this project's own no-hardcoding rule and wouldn't
+  generalize past this one host/deploy user. Requiring the env var with no
+  default -- rejected as unnecessary friction; `os.homedir()` already gives
+  the right answer in the common case (this app already runs as the deploy
+  user, not root, per the 2026-06-20 "Run ttyd as deploy user" decision).
+- **Rationale**: A general-purpose terminal app's fresh sessions should
+  start where a user expects (home directory), not incidentally wherever
+  the wrapping service's own working directory happens to be -- that was
+  never an intentional design choice, just an unset default falling through
+  to `tmux new-session`'s own inherited-CWD behavior.
+- **Consequences**: Only affects sessions created *after* this change ships
+  (existing live tmux sessions are unaffected until closed/recreated, and a
+  running session's cwd can still be freely `cd`'d regardless). New env var
+  documented in `.claude/rules/config.md`.
+- **Owner**: User (explicit request), implemented by claude.
+
 ### [2026-07-29] Added session-lifecycle MCP tools (list_sessions/create_session/close_session)
 - **Context**: While verifying the terminal.pz.net cutover (see the entry immediately
   below), the user asked whether an AI agent could list, create, or close NomadTTY

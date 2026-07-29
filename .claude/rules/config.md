@@ -26,6 +26,7 @@
 | `MCP_DENYLIST_ENABLED` | `1` (on) | `server/mcp/validation.js` — best-effort `type_command` destructive-pattern guard |
 | `MCP_DENYLIST_EXTRA` | *(none)* | `server/mcp/validation.js` — comma-separated extra regex sources |
 | `MCP_FOLLOW_MAX_SECONDS` | `30` | `server/mcp/tools.js` — max duration of `read_terminal_contents`'s `follow` streaming mode |
+| `SESSION_MANAGER_START_DIR` | deploy user's home dir (`os.homedir()`) | `server/session-manager.js` — working directory a brand-new tmux session's shell starts in (`tmux new-session -c`); falls back to the repo root if the configured/default directory doesn't exist |
 
 **Known gap (ASSUMPTION, flag if it changes):** unlike the legacy model, these Session
 Manager/MCP env vars are **not yet** wired into `Dockerfile`/`install.sh`/`systemd/*` —

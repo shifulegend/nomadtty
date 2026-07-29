@@ -28,6 +28,7 @@ const net = require('net');
 const crypto = require('crypto');
 const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { URL } = require('url');
 
@@ -35,6 +36,21 @@ const PORT = parseInt(process.env.SESSION_MANAGER_PORT || '4000', 10);
 const TTYD_BASE_PORT = parseInt(process.env.TTYD_BASE_PORT || '47900', 10);
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const KB_JS_PATH = path.join(__dirname, '..', 'src', 'kb.js');
+
+/* Where a brand-new tmux session's shell starts. Without an explicit `-c`,
+   `tmux new-session` inherits the CWD of the spawning process itself -- this
+   app's own repo checkout (wherever `node server/main.js` was launched
+   from, e.g. systemd's WorkingDirectory), not anywhere a user would expect
+   a fresh terminal to open. Defaults to the deploy user's home directory,
+   matching what every ordinary terminal emulator does; falls back to the
+   repo root (the previous, unconfigured behavior) if the configured/default
+   directory doesn't actually exist, so a bad env var can't break session
+   creation entirely. */
+const REPO_ROOT = path.join(__dirname, '..');
+const configuredStartDir = process.env.SESSION_MANAGER_START_DIR || os.homedir();
+let dirExists = false;
+try { dirExists = fs.statSync(configuredStartDir).isDirectory(); } catch (_e) { /* falls through */ }
+const SESSION_START_DIR = dirExists ? configuredStartDir : REPO_ROOT;
 
 /* ── Registry ──
  * Map<terminal_id, {
@@ -78,7 +94,7 @@ function spawnSession(label) {
   const port = allocatePort();
   const basePath = '/term/' + id + '/';
 
-  execFileSync('tmux', ['new-session', '-d', '-s', id], { stdio: 'ignore' });
+  execFileSync('tmux', ['new-session', '-d', '-s', id, '-c', SESSION_START_DIR], { stdio: 'ignore' });
 
   const proc = spawn('ttyd', [
     '--port', String(port),

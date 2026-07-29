@@ -17,6 +17,24 @@
 
 ---
 
+### [2026-07-29] New tmux sessions now start in the deploy user's home directory
+- **Timestamp**: 2026-07-29 18:40 UTC
+- **Change**: `server/session-manager.js`'s `spawnSession()` now passes
+  `-c $SESSION_START_DIR` to `tmux new-session`. New module-level constant
+  `SESSION_START_DIR`, resolved from the new `SESSION_MANAGER_START_DIR`
+  env var, falling back to `os.homedir()`, falling back to the repo root
+  if neither exists on disk.
+- **Rationale**: User reported every new session opened with cwd set to
+  the app's own repo checkout — an unintended side effect of `tmux
+  new-session` inheriting the spawning process's own CWD with no `-c` ever
+  passed, not a deliberate design choice.
+- **Affected areas**: `server/session-manager.js`, `.claude/rules/config.md`.
+- **Related decisions**: docs/ai/decision-log.md's matching 2026-07-29 entry.
+- **Verification**: `node --check server/session-manager.js` passes. Directly
+  verified via a scratch script calling the real `spawnSession()`: a
+  freshly created session's shell printed `CWD_IS:/home/ubuntu` for
+  `echo CWD_IS:$(pwd)`.
+
 ### [2026-07-29] Added list_sessions/create_session/close_session MCP tools
 - **Timestamp**: 2026-07-29 16:00-16:15 UTC
 - **Change**: Added 3 new MCP tools wired to `server/session-manager.js`'s existing
