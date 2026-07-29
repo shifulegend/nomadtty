@@ -17,6 +17,29 @@
 
 ---
 
+### [2026-07-29] Session Manager & Back button screenshots; fixed a layout recursion + a rendering bug
+- **Timestamp**: 2026-07-29 04:50 UTC
+- **Change**:
+  - Added `scripts/capture-session-manager-screenshots.mjs` and captured
+    `docs/assets/screenshot-session-manager-mobile.png` (Session Manager list, iPhone 14 viewport) and
+    `docs/assets/screenshot-back-button-mobile.png` (terminal view with the Back button, iPhone 14 viewport).
+  - Fixed `updateLayout()` in `src/kb.js`: added a re-entrancy guard to stop it from infinitely recursing
+    via its own dispatched `resize` event (mistakes.md 2026-07-29-011).
+  - Fixed `spawnSession()` in `server/session-manager.js`: ttyd now defaults to `rendererType=canvas`
+    instead of WebGL, which was compositing incorrectly under headless/software-GPU rendering
+    (mistakes.md 2026-07-29-012; decision-log.md same date).
+  - Added `playwright` as a root devDependency so `scripts/*.mjs` capture tools are runnable via
+    `npm install` (previously undeclared — a pre-existing gap in `scripts/capture-demo*.mjs` too).
+  - Re-verified the Playwright suite (11/11) and `scripts/verify-mcp-agent.mjs` after both fixes.
+- **Rationale**: Actually taking and looking at the requested screenshots surfaced two real bugs that no
+  prior automated verification (which asserts on the WebSocket byte stream, not rendered pixels) had ever
+  caught.
+- **Affected areas**: `scripts/capture-session-manager-screenshots.mjs` (new), `docs/assets/*.png` (new),
+  `src/kb.js`, `server/session-manager.js`, `package.json`
+- **Related commit**: pending
+- **Related decisions**: `docs/ai/decision-log.md` 2026-07-29 "canvas renderer" entry
+- **Related mistakes**: `docs/ai/mistakes.md` 2026-07-29-011, 2026-07-29-012
+
 ### [2026-07-29] Independent MCP verification agent; fixed a get_screenshot/scroll_buffer bug it found
 - **Timestamp**: 2026-07-29 04:40 UTC
 - **Change**:

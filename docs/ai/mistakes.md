@@ -5,6 +5,54 @@
 
 ---
 
+### [2026-07-29-012] ttyd's default WebGL renderer painted incorrectly under headless/software GPU
+- **Timestamp**: 2026-07-29 04:40 UTC
+- **Summary**: Screenshots of `/term/<id>/` taken via headless Playwright (for README documentation) showed
+  a mostly-blank terminal with a handful of huge, sparse glyphs — even after fixing the recursion bug
+  above and confirming DOM/canvas CSS sizing and the tmux pane's cols/rows (a sane `47x40`) were all
+  correct. The console logged `Automatic fallback to software WebGL has been deprecated` from Chromium.
+  Spawning a bare ttyd with `--client-option rendererType=canvas` (no WebGL) rendered the identical content
+  correctly and legibly; `--enable-unsafe-swiftshader` on the WebGL path did not help.
+- **Root cause**: ttyd's default xterm.js renderer is WebGL. Under a headless browser without real GPU
+  acceleration (this sandbox, likely CI generally, and possibly some low-end/virtualized real devices),
+  Chromium's software WebGL fallback can composite the terminal's glyph atlas incorrectly — a rendering
+  defect in that fallback path, not in NomadTTY's own layout/sizing code, which was verified correct.
+- **Affected files**: `server/session-manager.js` (`spawnSession`)
+- **Detection method**: Took the actual documentation screenshots this task required and looked at them,
+  rather than trusting that "no console errors" meant correct rendering. Isolated the cause by bypassing
+  session-manager/kb.js entirely and testing a bare `ttyd --client-option rendererType=canvas` process.
+- **Correction**: `spawnSession()` now passes `--client-option rendererType=canvas` by default (overridable
+  via `TTYD_RENDERER_TYPE`) — xterm.js's long-standing, broadly-compatible default renderer, not a new or
+  experimental option. See `docs/ai/decision-log.md`.
+- **Prevention rule**: When a task specifically asks for a screenshot, actually look at the resulting image
+  before considering the capture step "done" — a clean console and correct computed styles do not guarantee
+  correct pixels, especially for canvas/WebGL content in headless/software-rendering environments.
+
+### [2026-07-29-011] kb.js's updateLayout() recursed infinitely via its own dispatched 'resize' event
+- **Timestamp**: 2026-07-29 04:37 UTC
+- **Summary**: Capturing a mobile-viewport screenshot of `/term/<id>/` produced repeated `Maximum call stack
+  size exceeded` page errors and a terminal that failed to render its content. `updateLayout()` ends with
+  `window.dispatchEvent(new Event('resize'))` (to notify ttyd's fitAddon), and is *also* registered via
+  `window.addEventListener('resize', updateLayout)` — so dispatching 'resize' synchronously re-invokes
+  `updateLayout`, which dispatches 'resize' again, unbounded, until the call stack overflows.
+- **Root cause**: No re-entrancy guard between updateLayout's own resize dispatch and its own resize
+  listener registration. Present since the very first commit (`4d38c04`, 2026-06-20); nothing had
+  previously exercised it against a real browser to surface the resulting console errors or rendering
+  breakage — all prior automated verification of terminal behavior (Playwright suite, MCP tools) asserts on
+  the WebSocket byte stream, not on rendered pixels or console errors.
+- **Affected files**: `src/kb.js` (`updateLayout`)
+- **Detection method**: `page.on('pageerror', ...)` while capturing a documentation screenshot in a mobile
+  viewport surfaced the repeated stack-overflow errors; a blank/broken terminal in the resulting screenshot
+  confirmed the layout pass was not completing correctly.
+- **Correction**: Added a module-level `inUpdateLayout` boolean guard: a re-entrant call to `updateLayout`
+  from within its own dispatched 'resize' event now returns immediately as a no-op, while the dispatched
+  event still reaches every *other* 'resize' listener (ttyd's fitAddon included) exactly once.
+- **Prevention rule**: Any function that both dispatches an event AND is registered as that same event's
+  own listener needs an explicit re-entrancy guard — the coupling is a latent infinite-recursion bug even
+  if it happens not to manifest visibly in every environment/timing. Directly relevant to AGENTS.md's
+  "Terminal Emulator Performance Constraint" (avoid heavy DOM reflows) — this was reflow/recursion at its
+  worst, and had gone undetected because rendering was never actually screenshotted before.
+
 ### [2026-07-29-010] get_screenshot/scroll_buffer showed near-empty content on a fresh session
 - **Timestamp**: 2026-07-29 04:35 UTC
 - **Summary**: `captureViewport(tmuxName, { offsetFromBottom: 0 })` (backing `get_screenshot` and the live view in

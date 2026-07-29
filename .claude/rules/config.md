@@ -13,6 +13,7 @@
 |----------|---------|---------|
 | `SESSION_MANAGER_PORT` | `4000` | `server/session-manager.js` |
 | `TTYD_BASE_PORT` | `47900` | `server/session-manager.js` (per-session ttyd ports allocate upward from this) |
+| `TTYD_RENDERER_TYPE` | `canvas` | `server/session-manager.js` — xterm.js renderer for spawned ttyd processes; canvas is the default because WebGL renders incorrectly under headless/software-GPU environments (see decision-log.md) |
 | `MCP_PORT` | `4200` | `server/mcp/index.js` |
 | `MCP_HOST` | `0.0.0.0` | `server/mcp/index.js` |
 | `MCP_AUTH_TOKEN` | *(none)* | `server/mcp/auth.js` — required once `MCP_HOST` is non-loopback |

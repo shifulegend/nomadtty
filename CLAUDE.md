@@ -34,6 +34,12 @@ NomadTTY is a mobile-friendly web terminal, with two parallel deployment models 
   an argv array — never `exec`/`shell: true`.
 - tmux capture ranges anchoring on "the end of real content" use `#{cursor_y}`, never
   `#{pane_height}`. See mistakes.md [2026-07-29-008].
+- Any function that both dispatches an event and is registered as that same event's own
+  listener needs an explicit re-entrancy guard. See mistakes.md [2026-07-29-011].
+- Session-manager-spawned ttyd processes render via canvas, not WebGL (`TTYD_RENDERER_TYPE`).
+  See mistakes.md [2026-07-29-012] and decision-log.md.
+- Before calling a screenshot/rendering task "done," actually look at the resulting image —
+  a clean console does not guarantee correct pixels. See mistakes.md [2026-07-29-012].
 
 ## Key files
 | File | Role |

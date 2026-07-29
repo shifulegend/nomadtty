@@ -15,6 +15,28 @@
 
 ---
 
+### [2026-07-29] Session Manager's ttyd processes default to the canvas renderer, not WebGL
+- **Context**: Capturing documentation screenshots of `/term/<id>/` in a headless browser showed a mostly
+  blank terminal with a few huge, sparse glyphs, despite correct DOM/CSS sizing and a sane tmux pane
+  cols/rows. Traced to ttyd's default WebGL xterm.js renderer compositing incorrectly under Chromium's
+  software-WebGL fallback (see `docs/ai/mistakes.md` 2026-07-29-012).
+- **Decision**: `spawnSession()` in `server/session-manager.js` now passes `--client-option
+  rendererType=canvas` to every ttyd process it spawns, overridable via `TTYD_RENDERER_TYPE`.
+- **Alternatives considered**: `--enable-unsafe-swiftshader` on the Chromium side (tested, did not fix the
+  WebGL path); leaving WebGL as the default and only using canvas for automated screenshot capture
+  (rejected — it would mean the deployed app and the thing being documented/tested aren't the same
+  configuration, and WebGL's failure mode isn't provably confined to this one sandbox: any headless CI,
+  low-end device, or virtualized/remote-desktop browser without solid GPU acceleration could hit the same
+  defect for real users).
+- **Rationale**: Canvas is xterm.js's original, long-standing, broadly-compatible renderer — not an
+  experimental fallback. It renders identical content correctly everywhere tested, while WebGL's upside
+  (better performance under very heavy scroll/redraw load) is not a priority for a mobile-first terminal
+  toolbar whose primary constraint (AGENTS.md) is *avoiding* heavy rendering work in the first place.
+- **Consequences**: Every session-manager-spawned ttyd process (not the legacy Dockerfile/install.sh path,
+  which is unaffected) now renders via 2D canvas by default. Deployments that specifically want WebGL can
+  set `TTYD_RENDERER_TYPE=webgl`.
+- **Owner**: claude (session verifying/documenting the MCP overhaul release)
+
 ### [2026-07-29] MCP tools operate on tmux directly; session creation eagerly creates the tmux session
 - **Context**: The Session Manager's `spawnSession()` only started ttyd; ttyd itself lazily execs its wrapped
   `tmux new-session -A -s <id>` command on the *first* WebSocket connection. MCP tools (get_screenshot,

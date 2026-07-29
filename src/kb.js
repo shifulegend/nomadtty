@@ -147,26 +147,46 @@
   }, true);
 
   /* ── Layout: keep terminal container below toolbar and above keyboard ── */
+  /* Re-entrancy guard: updateLayout() dispatches a 'resize' event (below)
+     so ttyd's own fitAddon recalculates cols/rows, but updateLayout is
+     ALSO registered as a 'resize' listener itself (see window.addEventListener
+     near the bottom of this file). Without this guard, dispatching 'resize'
+     synchronously re-invokes updateLayout from within itself, which
+     dispatches 'resize' again, forever -- an unbounded synchronous
+     recursion that throws "Maximum call stack size exceeded" and can
+     leave the terminal's layout pass incomplete (blank/broken rendering).
+     This has been present since the very first commit; nothing previously
+     exercised it against a real browser to surface it. The guard makes
+     the re-entrant call from our own dispatch a no-op while still letting
+     the dispatched event reach every OTHER 'resize' listener (ttyd's own
+     fitAddon included) exactly once. */
+  var inUpdateLayout = false;
   function updateLayout() {
-    var kb = document.getElementById('kb');
-    var tc = document.getElementById('terminal-container');
-    if (!kb) return;
-    var toolbarH = kb.getBoundingClientRect().height;
-    /* Use visualViewport.height (shrinks on iOS when keyboard opens) rather
-       than window.innerHeight (doesn't shrink on iOS). Setting an explicit
-       height — not bottom — is the only reliable approach on iOS Safari:
-       position:fixed + bottom:X is broken when the keyboard is open. */
-    var vvh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-    var termH = Math.max(100, vvh - toolbarH);
-    if (tc) {
-      /* Replace cssText entirely (not +=) to avoid duplicate declarations
-         accumulating across calls, which confuses Safari's style engine. */
-      tc.style.cssText = 'position:fixed!important;top:' + toolbarH + 'px!important;' +
-        'left:0!important;right:0!important;bottom:auto!important;' +
-        'width:100%!important;height:' + termH + 'px!important;margin:0!important;';
+    if (inUpdateLayout) return;
+    inUpdateLayout = true;
+    try {
+      var kb = document.getElementById('kb');
+      var tc = document.getElementById('terminal-container');
+      if (!kb) return;
+      var toolbarH = kb.getBoundingClientRect().height;
+      /* Use visualViewport.height (shrinks on iOS when keyboard opens) rather
+         than window.innerHeight (doesn't shrink on iOS). Setting an explicit
+         height — not bottom — is the only reliable approach on iOS Safari:
+         position:fixed + bottom:X is broken when the keyboard is open. */
+      var vvh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      var termH = Math.max(100, vvh - toolbarH);
+      if (tc) {
+        /* Replace cssText entirely (not +=) to avoid duplicate declarations
+           accumulating across calls, which confuses Safari's style engine. */
+        tc.style.cssText = 'position:fixed!important;top:' + toolbarH + 'px!important;' +
+          'left:0!important;right:0!important;bottom:auto!important;' +
+          'width:100%!important;height:' + termH + 'px!important;margin:0!important;';
+      }
+      /* fire resize so ttyd's fitAddon recalculates cols/rows */
+      window.dispatchEvent(new Event('resize'));
+    } finally {
+      inUpdateLayout = false;
     }
-    /* fire resize so ttyd's fitAddon recalculates cols/rows */
-    window.dispatchEvent(new Event('resize'));
   }
 
   /* ── visualViewport: refit when mobile keyboard shows/hides ── */

@@ -85,6 +85,16 @@ function spawnSession(label) {
     '--interface', '127.0.0.1',
     '--writable',
     '--base-path', basePath,
+    /* ttyd's default xterm.js renderer is WebGL. Under headless/software-GPU
+       environments (CI, automated screenshot capture, some low-end/virtualized
+       browsers) that renderer can paint incorrectly -- glyphs at the wrong
+       scale, mostly-blank viewport -- even though the underlying tmux pane
+       and DOM/canvas sizing are correct (verified while capturing the
+       Session Manager's own documentation screenshots). The 2D canvas
+       renderer is xterm.js's long-standing, broadly-compatible default and
+       renders correctly in every environment tested; override via
+       TTYD_RENDERER_TYPE if a deployment specifically wants webgl/dom. */
+    '--client-option', 'rendererType=' + (process.env.TTYD_RENDERER_TYPE || 'canvas'),
     'tmux', 'new-session', '-A', '-s', id,
   ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
