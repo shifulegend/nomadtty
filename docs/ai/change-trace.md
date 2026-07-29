@@ -17,6 +17,14 @@
 
 ---
 
+### [2026-07-29] Footer changed from sticky-after-content to a true fixed, always-visible bottom bar
+- **Timestamp**: 2026-07-29 13:15 UTC
+- **Change**: User reported "the footer got overwritten when the sessions overflowed" and, after clarification via `AskUserQuestion`, confirmed the actual requirement was that the footer be *persistently* visible at the bottom of the screen (never requiring a scroll to see it) -- not the flex/`margin-top:auto` sticky-footer behavior shipped in the two prior commits, which only appeared after scrolling to the end of a list long enough to fill the viewport. Changed `#sm-footer` to `position:fixed;left:0;right:0;bottom:0` (the same pattern already used by `src/kb.js`'s `#kb` toolbar and `#back-btn`), added its own background + `border-top` for visual separation from the scrolling content, and reserved `padding-bottom:calc(50px + env(safe-area-inset-bottom))` on `#sm-root` so the session list can fully scroll clear of the footer's footprint rather than being covered by it. Removed the now-unnecessary `min-height:100dvh`/flex-column/`margin-top:auto` machinery from `#sm-root`.
+- **Rationale**: See `docs/ai/mistakes.md` [2026-07-29-021] -- this app already has an established fixed-overlay-with-reserved-footprint pattern for exactly this kind of persistent chrome element; the footer should have used it from the start instead of a generic sticky-footer recipe.
+- **Affected areas**: `public/session-manager.html`, `docs/assets/screenshot-session-manager-mobile.png` (regenerated again, now showing the fixed footer with the original 3 realistic session labels)
+- **Verification**: Live server boot; a Playwright sweep from 1 to 20 sessions (Pixel 7 viewport) checked two things at every count: (1) the footer is fully within the initial viewport with zero scrolling (`true` at every count, 1-20), and (2) after scrolling to the true bottom of the list, the gap between the last session row and the footer never goes negative (steady 24px clearance from count 10 onward, where the list first exceeds the viewport). Full Playwright suite re-run twice: one isolated failure (`android-mobile-stress.spec.js`'s Fn-row-toggle test, unrelated to this change) passed cleanly on immediate re-run and the full suite passed 55/55 on both full runs -- consistent with the documented flake class, not a regression. Screenshots taken of both the unscrolled and fully-scrolled states for visual confirmation. Temporary verification specs and test sessions deleted afterward; not committed.
+- **Related mistakes**: `docs/ai/mistakes.md` [2026-07-29-021]
+
 ### [2026-07-29] Copyright footer added to the Session Manager screen
 - **Timestamp**: 2026-07-29 12:05 UTC
 - **Change**: Added `#sm-footer` (`&copy; 2026 shifulegend — NomadTTY`) to the bottom of

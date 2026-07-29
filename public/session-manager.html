@@ -40,9 +40,13 @@
       font-family:monospace;overflow-y:auto;-webkit-user-select:none;}
     #sm-root{max-width:480px;margin:0 auto;padding:20px 16px;
       padding-top:calc(20px + env(safe-area-inset-top));
-      padding-bottom:calc(20px + env(safe-area-inset-bottom));
-      min-height:100vh;min-height:100dvh;box-sizing:border-box;
-      display:flex;flex-direction:column;}
+      /* Reserves space for the fixed #sm-footer below (its own rendered
+         height is ~35px) so the last session row can scroll fully clear
+         of it instead of being covered -- same footprint-reservation
+         pattern src/kb.js uses for #back-btn vs. the scrollable toolbar
+         row. See docs/ai/mistakes.md 2026-07-29-017. */
+      padding-bottom:calc(50px + env(safe-area-inset-bottom));
+      box-sizing:border-box;}
     #sm-brand{display:flex;align-items:center;gap:6px;margin-bottom:16px;}
     #sm-brand img{width:20px;height:20px;display:block;}
     #sm-brand span{font-size:13px;color:#7fb8ff;}
@@ -71,7 +75,14 @@
     .sm-btn.close{border-color:#552222;color:#e08787;}
     .sm-btn.close:active{background:#7a1f1f;color:#fff;}
     #empty-state{font-size:13px;color:#666;text-align:center;padding:30px 0;}
-    #sm-footer{font-size:11px;color:#555;text-align:center;margin-top:auto;padding-top:30px;}
+    /* Fixed to the true bottom of the screen at all times (never scrolls
+       with the list), matching the same position:fixed overlay pattern
+       #kb/#back-btn already use elsewhere in this app. */
+    #sm-footer{position:fixed;left:0;right:0;bottom:0;z-index:10;
+      max-width:480px;margin:0 auto;box-sizing:border-box;
+      background:#0b0b0c;border-top:1px solid #1c1c1c;
+      font-size:11px;color:#555;text-align:center;
+      padding:10px 16px calc(10px + env(safe-area-inset-bottom));}
   </style>
 </head>
 <body>
