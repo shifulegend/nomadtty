@@ -69,9 +69,36 @@
   immediate re-run alone and again on a full second full-suite run (55/55 both times)
   -- consistent with the documented PTY-redraw-timing flake class in
   `tests/README.md`, not a regression from this change (which touches only
-  `public/session-manager.html`, never the terminal/Back-button code path). Temporary
+  `public/session-manager.html`, never the terminal/Back-button code path). **Follow-up
+  re-verification** (user correctly pointed out the 8-session case never actually
+  exceeded the viewport, so it hadn't really exercised the overlap scenario -- see
+  `docs/ai/mistakes.md` [2026-07-29-020]): re-ran with 13 sessions, confirmed real
+  overflow via `document.body.scrollHeight` (1085px) vs. the 839px viewport (`body`,
+  not `documentElement`, is the actual `overflow-y:auto` scroll container here),
+  scrolled `document.body.scrollTop` to the true bottom, and confirmed an 8px gap
+  between the last visible session row and the footer with zero overlap. Temporary
   verification specs deleted afterward; not committed.
 - **Related decisions**: none new.
+
+### [2026-07-29] README's Session Manager screenshot restored to realistic session data
+- **Timestamp**: 2026-07-29 12:55 UTC
+- **Change**: While re-verifying the footer/overlap fix above, noticed
+  `docs/assets/screenshot-session-manager-mobile.png` had been regenerated as an
+  **empty-list** screenshot during the copyright-footer and banner work, silently
+  regressing it from the original image (3 realistic sessions: `desktop-dpr1`,
+  `claude — dotfiles repo`, `build watcher`) despite the README's own alt text still
+  reading "showing two running sessions". Recreated the same three session labels and
+  retook the screenshot, so it now shows the new banner/footer *and* matches its own
+  alt text with realistic-looking content again.
+- **Rationale**: A doc image should demonstrate the feature with realistic data, not
+  the empty state, and must not silently drift out of sync with its own caption.
+- **Affected areas**: `docs/assets/screenshot-session-manager-mobile.png`
+- **Verification**: Playwright screenshot at the Pixel 7 viewport confirmed zero
+  horizontal overflow with the three sessions present, banner visible at top, footer
+  pinned at bottom. Sessions and temporary spec deleted afterward; not committed.
+- **Related mistakes**: this was itself an undocumented regression introduced
+  incidentally by the two commits above -- not significant enough on its own to
+  warrant a dedicated `mistakes.md` entry, but recorded here per change-trace discipline.
 
 ### [2026-07-29] Comprehensive branding, SEO metadata, and favicon/manifest assets added
 - **Timestamp**: 2026-07-29 11:39 UTC
