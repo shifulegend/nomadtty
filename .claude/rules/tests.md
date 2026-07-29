@@ -10,7 +10,7 @@
   testing (`specs/android-mobile-stress.spec.js`) — both via Playwright's
   `devices['Pixel 7']` emulation (see docs/ai/decision-log.md for why this is used
   instead of a full Android emulator). Run: `cd tests && npm install && npx playwright
-  test`. 60 tests, must stay 60/60 passing (occasional isolated PTY-redraw-timing
+  test`. 63 tests, must stay 63/63 passing (occasional isolated PTY-redraw-timing
   flakes are a known class — see `tests/README.md`'s "A note on flakiness" — a
   *repeatable* failure on a specific test is the real signal).
   See `tests/README.md` for why terminal-output assertions read the ttyd WebSocket
@@ -41,9 +41,15 @@
 9. CDP method: `window._S.readyState === 1` must be true.
 10. Swipe/drag across a toolbar button (don't just tap it) → confirm it does NOT
     register as a press (mistakes.md 2026-07-29-019), and confirm a swipe on the
-    terminal itself never reaches the PTY as input (mistakes.md 2026-07-29-018 —
-    touch-scroll-into-history is intentionally disabled; a swipe must be a total
-    no-op there, never arrow-key escape bytes).
+    terminal with Hist OFF never reaches the PTY as input (mistakes.md
+    2026-07-29-018 — a swipe must be a total no-op there, never arrow-key
+    escape bytes).
+11. Tap Hist (turns blue) → swipe the terminal → confirm real scrollback content
+    (produced earlier, since scrolled off the live view) reappears, and that
+    `getSentInput()` in the WS capture helper stays empty throughout (this
+    gesture must drive tmux copy-mode server-side, never `window._S.send()` —
+    see decision-log.md's 2026-07-29 "Mobile touch-scroll re-enabled" entry).
+    Tap Hist again → confirm typing works normally afterward.
 
 ### After any nginx/ttyd.conf change
 1. `sudo nginx -t` — must pass (MIME duplicate warnings from other vhosts are OK).
@@ -60,10 +66,14 @@
 2. `docker run --rm -p 18080:80 nomadtty-test` → open `http://localhost:18080`.
 
 ### After any server/session-manager.js, server/mcp/**, or server/main.js change
-1. `cd tests && npx playwright test` — must stay 60/60 passing. This alone covers what
+1. `cd tests && npx playwright test` — must stay 63/63 passing. This alone covers what
    used to be a manual checklist: both listeners booting with no port conflicts,
    `tools/list` returning all 10 tools with valid schemas, every tool's happy path and
-   its validation-error paths, auth accept/reject, and the boot-security refusal.
+   its validation-error paths, auth accept/reject, the boot-security refusal, and (for
+   any change touching `server/mcp/tmux.js`'s send*/copy-mode functions specifically)
+   `mcp-tools.spec.js`'s "touch-history (copy-mode) / MCP interop" block — a concurrent
+   `type_command`/`send_keystroke` call must still land in the shell, not copy-mode,
+   while the pane is mid-scroll.
 2. Only fall back to manual `curl`/`tmux capture-pane` cross-checking when
    investigating a failure the automated suite doesn't pinpoint clearly, or when
    exploring genuinely new behavior not yet covered by `tests/specs/mcp-tools.spec.js`.

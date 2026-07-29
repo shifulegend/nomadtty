@@ -220,6 +220,58 @@ test.describe('scroll_buffer', () => {
   });
 });
 
+test.describe('touch-history (copy-mode) / MCP interop', () => {
+  /*
+   * kb.js's mobile "Hist" toolbar button drives real tmux copy-mode
+   * server-side (server/session-manager.js's /api/sessions/:id/copy-scroll,
+   * see docs/ai/decision-log.md) so a swipe pages through genuine
+   * scrollback, exactly like a native terminal. That pane is the SAME one
+   * every MCP tool acts on, so a human left mid-scroll must never be able
+   * to break a concurrent agent call. These tests drive that endpoint
+   * directly (no browser needed -- it's a plain loopback HTTP POST, same
+   * as the rest of the Session Manager API) to simulate "a human tapped
+   * Hist and is mid-swipe" concurrently with real MCP tool calls.
+   */
+  async function enterCopyMode(request, terminalId) {
+    const res = await request.post(`${BASE_URL}/api/sessions/${terminalId}/copy-scroll`, {
+      data: { action: 'enter' },
+    });
+    expect(res.ok()).toBe(true);
+  }
+
+  test('type_command still lands in the shell (not copy-mode) while the pane is mid-scroll', async ({ request, mcpSessionId, terminalId }) => {
+    await runAndWaitForOutput(request, mcpSessionId, terminalId, 'echo before_scroll', 'before_scroll');
+
+    await enterCopyMode(request, terminalId);
+    const midScroll = await callToolExpectOk(request, mcpSessionId, 'get_screenshot', { terminal_id: terminalId });
+    // capture-pane's returned text is unaffected by copy-mode -- verifies
+    // MCP reads stay correct even while a human is mid-scroll.
+    expect(outputHasOwnLine(midScroll.content, 'before_scroll')).toBe(true);
+
+    // The interference case: an agent's send must still work correctly,
+    // not error and not silently vanish into copy-mode's own key bindings.
+    const marker = `after_scroll_${test.info().testId}`;
+    await runAndWaitForOutput(request, mcpSessionId, terminalId, `echo ${marker}`, marker);
+  });
+
+  test('send_keystroke still lands in the shell while the pane is mid-scroll', async ({ request, mcpSessionId, terminalId }) => {
+    await enterCopyMode(request, terminalId);
+    // Short and fixed, not per-testId: terminalId already isolates this test
+    // from every other, and `echo <marker>` split into individual named
+    // keys must stay under MCP_MAX_KEYS_PER_CALL (32).
+    const marker = 'sk_scroll_ok';
+    await callToolExpectOk(request, mcpSessionId, 'send_keystroke', {
+      terminal_id: terminalId, mode: 'named',
+      keys: `echo ${marker}`.split('').map((c) => c === ' ' ? 'Space' : c),
+    });
+    await callToolExpectOk(request, mcpSessionId, 'send_keystroke', { terminal_id: terminalId, mode: 'named', keys: ['Enter'] });
+    await pollUntil(async () => {
+      const shot = await callToolExpectOk(request, mcpSessionId, 'get_screenshot', { terminal_id: terminalId });
+      return outputHasOwnLine(shot.content, marker) ? shot : null;
+    });
+  });
+});
+
 test.describe('type_command', () => {
   test('submit:false leaves the text unsent until Enter is sent separately', async ({ request, mcpSessionId, terminalId }) => {
     const marker = `unsent_${test.info().testId}`;

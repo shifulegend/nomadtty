@@ -15,6 +15,74 @@
 
 ---
 
+### [2026-07-29] Mobile touch-scroll re-enabled by driving real tmux copy-mode, with a mandatory MCP self-heal (supersedes "disabled" below)
+- **Context**: A user reported being unable to scroll a session with long
+  output on mobile Safari. Root cause: touch-scroll had been intentionally
+  disabled (see the entry directly below and mistakes.md 2026-07-29-018)
+  after it was found to leak arrow-key escape sequences into the PTY. That
+  fix's own follow-up note suggested driving tmux's copy-mode/history
+  instead of xterm.js's client buffer, but left it unimplemented. The user
+  explicitly required the fix not interfere with the MCP server, which acts
+  on the exact same tmux panes concurrently.
+- **Decision**: `src/kb.js` gained a sticky "Hist" toolbar toggle. While
+  on, a swipe on the terminal POSTs `enter`/`scroll` actions to a new
+  `POST /api/sessions/:id/copy-scroll` endpoint (`server/session-manager.js`),
+  which runs `tmux copy-mode` / `tmux send-keys -X scroll-up|scroll-down`
+  against the pane (new primitives in `server/mcp/tmux.js`: `isInCopyMode`,
+  `enterCopyMode`, `exitCopyModeIfActive`, `scrollCopyMode`, all via a
+  timeout-bounded `execFileSync` call, `COPY_MODE_TIMEOUT_MS=2000`). Because
+  ttyd is already an attached tmux client for that pane, tmux's own
+  multi-client redraw mechanism pushes the scrolled view into the browser's
+  existing WebSocket automatically -- no separate fetch/render path needed
+  client-side, and this gesture never calls `window._S.send()`, so it
+  cannot resurrect the original arrow-key-leak bug even in principle.
+  Critically: every MCP "send" tool (`sendLiteral`/`sendEnter`/
+  `sendNamedKeys`/`sendHexKeys` in `server/mcp/tmux.js`) now calls
+  `exitCopyModeIfActive()` FIRST, unconditionally -- an agent's command
+  always forces the pane back to live before it's sent, so a human mid-scroll
+  can never break a concurrent MCP call. `kb.js` also force-exits copy-mode
+  once on every fresh page load, so a tab closed/backgrounded mid-scroll
+  can't leave a session permanently stuck for the next viewer.
+- **Alternatives considered**: A read-only capture-pane snapshot rendered
+  into a separate client-side overlay (no pane-mode mutation at all, so
+  structurally zero MCP interference) -- initially proposed and rejected by
+  the user in favor of a more native-feeling live-scrolling experience.
+  Driving copy-mode via literal prefix-key bytes through the PTY (mimicking
+  a real user's keychord) -- rejected: fragile against a user's configured
+  tmux prefix key, and still goes through the exact `tmux send-keys`
+  literal-injection code path found unsafe under copy-mode (see below).
+- **Rationale**: Empirical investigation (see mistakes.md's matching entry)
+  found `tmux send-keys -l`/a plain named key targeting a pane already in
+  copy-mode either fails ("no current client", no client attached) or hangs
+  indefinitely (a real pty-backed client attached) -- unacceptable for an
+  MCP tool call, since a hang would freeze this whole single-threaded Node
+  process. But `tmux copy-mode` / `send-keys -X ...` (copy-mode commands,
+  as opposed to literal/named-key input) were fast and safe as a detached,
+  no-client script call in every test run. This makes the self-heal
+  approach both correctness-preserving (an agent's send always still reaches
+  the shell) and low-risk (copy-mode enter/scroll/cancel calls themselves
+  don't hit the unsafe code path). The genuinely-attached-client condition
+  for the `-X` commands specifically could not be fully reproduced in this
+  sandbox (ttyd only registers as a tmux client after its own WS
+  subprotocol handshake, not a bare WebSocket upgrade) -- the 2s bounded
+  timeout on these new calls exists specifically to cap the blast radius of
+  that residual, unconfirmed gap, not because a problem was observed there.
+- **Consequences**: `capture-pane`-based MCP reads (`get_screenshot`,
+  `read_terminal_contents`, `scroll_buffer`) were already unaffected by
+  copy-mode (verified: `#{cursor_y}`, which they anchor on, tracks the live
+  shell cursor, not the copy-mode scroll position) -- only the "send" tools
+  needed the new guard. New env var `SESSION_MANAGER_SCROLL_LINES_MAX`
+  (default 200) bounds a single scroll request's line count -- hygiene, not
+  a security boundary, since this endpoint is loopback-only like the rest
+  of the Session Manager API. New tests: `tests/specs/android-mobile-ux.spec.js`
+  (Hist toggle reveals real scrollback, zero PTY input bytes sent) and
+  `tests/specs/mcp-tools.spec.js`'s new "touch-history (copy-mode) / MCP
+  interop" describe block (type_command/send_keystroke still land in the
+  shell, not copy-mode, while a human is mid-scroll).
+- **Owner**: User (explicit direction on the copy-mode-vs-read-only-overlay
+  tradeoff via AskUserQuestion), implemented by claude.
+
+
 ### [2026-07-29] New tmux sessions start in the deploy user's home directory, not the repo checkout
 - **Context**: User reported every new terminal session opens with cwd
   `/home/ubuntu/nomadtty` (this app's own repo checkout) instead of

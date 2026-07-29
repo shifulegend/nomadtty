@@ -31,9 +31,14 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { URL } = require('url');
+const tmuxLib = require('./mcp/tmux');
 
 const PORT = parseInt(process.env.SESSION_MANAGER_PORT || '4000', 10);
 const TTYD_BASE_PORT = parseInt(process.env.TTYD_BASE_PORT || '47900', 10);
+/* Caps a single copy-scroll request's line count -- not a security boundary
+   (this API is loopback-only, same trust level as the rest of it), just
+   hygiene against a buggy/runaway client sending an absurd -N value. */
+const SCROLL_LINES_MAX = parseInt(process.env.SESSION_MANAGER_SCROLL_LINES_MAX || '200', 10);
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const KB_JS_PATH = path.join(__dirname, '..', 'src', 'kb.js');
 
@@ -366,6 +371,40 @@ const server = http.createServer((req, res) => {
   if (closeMatch && req.method === 'DELETE') {
     const ok = closeSession(closeMatch[1]);
     return sendJson(res, ok ? 200 : 404, { ok });
+  }
+
+  /* ── Touch-scroll: drives tmux copy-mode on the session's own pane, NOT
+     xterm.js's client-side scrollback (which never exists under tmux --
+     see docs/ai/mistakes.md 2026-07-29-018). ttyd is already an attached
+     tmux client for this pane, so once copy-mode is entered/scrolled here,
+     ttyd's own existing live connection redraws the real scrollback into
+     the browser automatically -- kb.js needs no separate fetch/render path.
+     This never touches the pane's *content*, only its client-visible mode,
+     and every MCP "send" tool (server/mcp/tmux.js) force-exits copy-mode
+     before acting, so a concurrent agent command always still lands in the
+     shell -- see docs/ai/decision-log.md. */
+  const scrollMatch = p.match(/^\/api\/sessions\/([a-f0-9]+)\/copy-scroll$/);
+  if (scrollMatch && req.method === 'POST') {
+    const entry = sessions.get(scrollMatch[1]);
+    if (!entry) return sendJson(res, 404, { error: 'Session not found' });
+    return readJsonBody(req, (_, body) => {
+      try {
+        if (body.action === 'enter') {
+          tmuxLib.enterCopyMode(entry.tmuxName);
+        } else if (body.action === 'exit') {
+          tmuxLib.exitCopyModeIfActive(entry.tmuxName);
+        } else if (body.action === 'scroll') {
+          const direction = body.direction === 'down' ? 'down' : 'up';
+          const lines = Math.max(1, Math.min(SCROLL_LINES_MAX, parseInt(body.lines, 10) || 1));
+          tmuxLib.scrollCopyMode(entry.tmuxName, direction, lines);
+        } else {
+          return sendJson(res, 400, { error: 'Invalid action' });
+        }
+        sendJson(res, 200, { ok: true });
+      } catch (err) {
+        sendJson(res, 500, { error: 'Scroll action failed: ' + err.message });
+      }
+    });
   }
 
   if (p === '/kb.js') return serveStatic(res, KB_JS_PATH);

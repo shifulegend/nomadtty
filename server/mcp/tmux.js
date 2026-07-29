@@ -21,6 +21,24 @@ function tmux(args) {
   return execFileSync('tmux', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 }
 
+/* Copy-mode commands (below) are driven from a fresh, one-shot `tmux <cmd>`
+ * invocation, never from an actual attached client -- unlike ttyd's own
+ * connection, which IS a real client. `tmux send-keys -X ...` (copy-mode
+ * commands) run this way was fast and safe in every no-real-client-attached
+ * test run; a genuinely attached-client run could not be fully reproduced
+ * in this environment (ttyd only registers as a tmux client after its own
+ * WS subprotocol handshake, not a bare WebSocket upgrade), so that
+ * condition is NOT empirically confirmed safe -- unlike the plain
+ * (non -X) send-keys path below, which WAS confirmed unsafe with a real
+ * client attached (observed hang, see docs/ai/decision-log.md). A bounded
+ * timeout is applied here defensively for that unresolved gap:
+ * `execFileSync` has no default timeout, and a hang would block this
+ * entire single-threaded Node process, not just one call. */
+const COPY_MODE_TIMEOUT_MS = 2000;
+function tmuxBounded(args) {
+  return execFileSync('tmux', args, { encoding: 'utf8', timeout: COPY_MODE_TIMEOUT_MS });
+}
+
 function paneExists(tmuxName) {
   try {
     execFileSync('tmux', ['has-session', '-t', tmuxName], { stdio: 'ignore' });
@@ -102,22 +120,65 @@ function captureViewport(tmuxName, { ansi = false, offsetFromBottom = 0 } = {}) 
   return capturePane(tmuxName, { ansi, start, end });
 }
 
+/**
+ * True if the pane is currently in tmux copy-mode -- i.e. a client (the
+ * browser's "Hist" toggle, see server/session-manager.js) has frozen the
+ * live view to page through scrollback.
+ */
+function isInCopyMode(tmuxName) {
+  return tmuxBounded(['display-message', '-p', '-t', tmuxName, '-F', '#{pane_in_mode}']).trim() === '1';
+}
+
+/** Enters copy-mode without moving the view. */
+function enterCopyMode(tmuxName) {
+  tmuxBounded(['copy-mode', '-t', tmuxName]);
+}
+
+/**
+ * Forces the pane back to live/shell input, unconditionally safe to call
+ * even when the pane is already live (no-ops). Every send* function below
+ * calls this FIRST: `tmux send-keys -l`/a plain named key targeting a pane
+ * that is in copy-mode was found, empirically, to either fail outright
+ * ("no current client", with no client attached at all) or -- with a real
+ * persistent pty-backed client attached -- hang indefinitely. Either
+ * outcome is unacceptable for an MCP tool call (a hang would freeze this
+ * whole single-threaded Node process, not just the one call), so an
+ * agent's send must always force the pane back to live first rather than
+ * risk either failure mode. This makes an agent's command always win over
+ * a concurrent human mid-scroll (see docs/ai/decision-log.md), which is
+ * also the more useful behavior: the human sees the agent's new output
+ * immediately rather than staying stuck on a stale scrolled-back view.
+ */
+function exitCopyModeIfActive(tmuxName) {
+  if (isInCopyMode(tmuxName)) tmuxBounded(['send-keys', '-X', '-t', tmuxName, 'cancel']);
+}
+
+/** Pages the copy-mode view by `lines` rows, entering copy-mode first if needed. */
+function scrollCopyMode(tmuxName, direction, lines) {
+  if (!isInCopyMode(tmuxName)) enterCopyMode(tmuxName);
+  tmuxBounded(['send-keys', '-X', '-t', tmuxName, '-N', String(lines), direction === 'up' ? 'scroll-up' : 'scroll-down']);
+}
+
 /** Injects literal text as if typed, with no key-name interpretation. */
 function sendLiteral(tmuxName, text) {
+  exitCopyModeIfActive(tmuxName);
   tmux(['send-keys', '-t', tmuxName, '-l', '--', text]);
 }
 
 function sendEnter(tmuxName) {
+  exitCopyModeIfActive(tmuxName);
   tmux(['send-keys', '-t', tmuxName, 'Enter']);
 }
 
 /** `keys` must already be validated tmux key-name tokens (see validation.js). */
 function sendNamedKeys(tmuxName, keys) {
+  exitCopyModeIfActive(tmuxName);
   tmux(['send-keys', '-t', tmuxName, '--', ...keys]);
 }
 
 /** `hexBytes` must already be validated 2-digit hex strings (see validation.js). */
 function sendHexKeys(tmuxName, hexBytes) {
+  exitCopyModeIfActive(tmuxName);
   tmux(['send-keys', '-t', tmuxName, '-H', '--', ...hexBytes]);
 }
 
@@ -191,4 +252,5 @@ module.exports = {
   paneExists, getPaneInfo, capturePane, captureFull, captureHead, captureTail,
   captureViewport, sendLiteral, sendEnter, sendNamedKeys, sendHexKeys,
   processTree, listeningSockets,
+  isInCopyMode, enterCopyMode, exitCopyModeIfActive, scrollCopyMode,
 };

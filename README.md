@@ -906,6 +906,7 @@ disclosure process.
 | **HOME / END** | `\x1b[H` / `\x1b[F` |
 | **PGUP / PGDN** | `\x1b[5~` / `\x1b[6~` |
 | **INS / DEL** | `\x1b[2~` / `\x1b[3~` |
+| **Hist** | Sticky toggle — while on, swipe the terminal to page through real tmux scrollback (drives tmux copy-mode server-side; sends no PTY bytes) |
 | **Paste** | Clipboard API (HTTPS) or overlay textarea (HTTP) |
 | **Fn** | Toggle F1–F12 row |
 | **F1–F12** | Standard xterm sequences |

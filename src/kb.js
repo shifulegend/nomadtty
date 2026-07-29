@@ -3,6 +3,10 @@
   var M = { c: false, s: false, a: false };
   var zoom = 1, fnOpen = false;
 
+  /* ── History scroll state ── */
+  var SESSION_ID = (location.pathname.match(/^\/term\/([a-f0-9]+)\//) || [])[1];
+  var histMode = false;
+
   /* ── Send bytes to PTY ── */
   function send(d) {
     var s = window._S;
@@ -124,6 +128,24 @@
     zoom = Math.max(0.5, Math.min(2.5, zoom + d * 0.15));
     var xterm = document.querySelector('.xterm');
     if (xterm) xterm.style.zoom = zoom;
+  };
+
+  /* ── History scroll (drives tmux copy-mode server-side; see the block
+     near initTouchScroll below for the full rationale) ── */
+  function postScroll(body) {
+    if (!SESSION_ID) return;
+    fetch('/api/sessions/' + SESSION_ID + '/copy-scroll', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch(function () {}); // fire-and-forget, same as session creation elsewhere
+  }
+
+  window.KH = function (e) {
+    e.preventDefault();
+    histMode = !histMode;
+    var b = document.getElementById('kb-hist');
+    if (b) b.classList.toggle('on', histMode);
+    postScroll({ action: histMode ? 'enter' : 'exit' });
   };
 
   /* ── Physical keyboard intercept for active modifiers ── */
@@ -250,6 +272,7 @@
     btn('INS',       "KN('INS',event)"),
     btn('DEL',       "KN('DEL',event)"),
     '<span class="sep"></span>',
+    btn('Hist',      "KH(event)", 'kb-hist'),
     btn('Paste',     "KP(event)"),
     '<span class="sep"></span>',
     btn('Fn',        "TFN(event)", 'kb-fn'),
@@ -431,39 +454,65 @@
   setTimeout(function () { updateLayout(); watchTerminalContainer(); }, 1500);
   window.addEventListener('resize', updateLayout);
 
-  /* ── Touch scroll: DISABLED -- see docs/ai/mistakes.md 2026-07-29-018 ──
+  /* ── Touch scroll: drives tmux copy-mode server-side, NOT xterm.js's
+     client-side scrollback -- see docs/ai/mistakes.md 2026-07-29-018.
      This used to dispatch a synthetic WheelEvent on .xterm per touchmove
      step, on the theory that xterm.js's own wheel handler would scroll its
-     client-side scrollback buffer (xterm.js has no built-in touch scroll,
-     issue #5377). Rigorous mobile stress-testing found that theory to be
-     wrong for THIS app in a way that actively corrupts the screen: every
-     session here runs inside tmux (a hard architectural invariant, see
-     CLAUDE.md), and tmux repaints its pane as a fixed-size display,
-     managing history entirely on the server side -- it never feeds
-     xterm.js's own client buffer, so `buffer.active.length` never grows
-     past `rows` no matter how much output streams through. That means
-     there is NEVER any client-side scrollback for a wheel event to
-     scroll into, so xterm.js's wheel handler falls through to ITS
-     documented fallback for "nothing left to scroll": sending literal
-     Up/Down-arrow key ESCAPE SEQUENCES to the PTY as real input. Those
-     bytes reach whatever is running in the foreground, and if it isn't
-     reading stdin (e.g. any non-interactive long-running command), the
-     tty's own local echo prints them back as literal, repeated "^[[A"
-     garbage mixed into live output -- this happened on EVERY touch-scroll
-     gesture tested, not just an edge case. Re-enabling any client-side
-     scroll gesture here would need to drive tmux's own copy-mode/history
-     instead of xterm.js's (which is what the MCP `scroll_buffer` tool
-     already does server-side, see server/mcp/tmux.js) -- tracked as a
-     follow-up, not implemented here. touchmove's preventDefault() is kept
-     to still suppress iOS's page-bounce overscroll effect. */
+     client-side scrollback buffer. That was wrong for THIS app: every
+     session runs inside tmux (a hard architectural invariant, see
+     CLAUDE.md), which manages history entirely server-side and never
+     feeds xterm.js's own client buffer, so there was NEVER anything for a
+     wheel event to scroll into -- every dispatch fell through to xterm.js's
+     "nothing left to scroll" fallback, sending literal Up/Down-arrow key
+     ESCAPE SEQUENCES into the PTY as real input, corrupting the screen of
+     any foreground process not reading stdin.
+     Fixed here by driving tmux's own copy-mode instead (postScroll(),
+     above), exactly as the prior fix's own follow-up note prescribed: when
+     "Hist" is toggled on (KH), a swipe here POSTs enter/scroll actions to
+     server/session-manager.js, which runs `tmux copy-mode`/`send-keys -X`
+     against the pane ttyd is already attached to -- ttyd's own live
+     connection then redraws the real scrollback into the browser
+     automatically, no client-side buffer or extra render path needed. No
+     PTY input byte is ever sent by this gesture, in or out of Hist mode,
+     so the original corruption bug is structurally impossible here.
+     Direction: natural/content-follows-finger scrolling -- finger drags
+     DOWN (content follows down) reveals OLDER history (tmux "scroll-up");
+     finger drags UP reveals newer/live (tmux "scroll-down"). LINE_PX is
+     an approximate row height in CSS px, only needs to be roughly right
+     since it just paces how many tmux lines one swipe covers.
+     touchmove's preventDefault() is unconditional (in or out of Hist
+     mode) to keep suppressing iOS's page-bounce overscroll effect. */
+  var LINE_PX = 18;
   function initTouchScroll() {
     var xterm = document.querySelector('.xterm');
     if (!xterm) { setTimeout(initTouchScroll, 400); return; }
 
+    var lastY = 0, accY = 0;
+    xterm.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) return;
+      lastY = e.touches[0].clientY;
+      accY = 0;
+    }, { passive: true });
+
     xterm.addEventListener('touchmove', function (e) {
       if (e.touches.length !== 1) return;
       e.preventDefault();
+      if (!histMode) return;
+      var y = e.touches[0].clientY;
+      accY += y - lastY;
+      lastY = y;
+      var lines = Math.trunc(accY / LINE_PX);
+      if (lines === 0) return;
+      postScroll({ action: 'scroll', direction: lines > 0 ? 'up' : 'down', lines: Math.abs(lines) });
+      accY -= lines * LINE_PX;
     }, { passive: false });
   }
   setTimeout(initTouchScroll, 800);
+
+  /* Guarantee every fresh page load/reconnect starts from a known-live
+     pane, self-healing any copy-mode left engaged by a previous tab that
+     was closed/backgrounded mid-scroll (histMode itself is just an
+     in-memory JS var, so it can't reflect that on its own). Harmless
+     no-op if the pane was already live. */
+  postScroll({ action: 'exit' });
 })();

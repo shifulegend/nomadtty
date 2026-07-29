@@ -5,6 +5,68 @@
 
 ---
 
+### [2026-07-29-024] `tmux send-keys -l`/a plain named key can hang indefinitely (not just error) when the target pane is in copy-mode
+- **Timestamp**: 2026-07-29 18:10 UTC
+- **Summary**: While implementing real tmux-copy-mode-driven touch scrolling
+  (see docs/ai/decision-log.md's matching entry), investigated what happens
+  if an MCP "send" tool (`type_command`, which calls `sendLiteral` ->
+  `tmux send-keys -l`) runs while a human has the same pane frozen in
+  copy-mode via the new browser scroll gesture. With NO tmux client ever
+  attached to the test session, `send-keys -l` while in copy-mode returned
+  `"no current client"` and the command never executed (confirmed via a
+  later `capture-pane` showing no change). With a real, persistent
+  pty-backed client attached (`script -qc "tmux attach-session -t X"
+  /dev/null &`, simulating what ttyd genuinely is once a browser has
+  joined), the identical `send-keys -l` command **hung indefinitely** --
+  the command that discovered this was killed by a 2-minute Bash tool
+  timeout rather than ever returning, with or without an error.
+- **Root cause**: Not fully characterized (tmux internals), but the
+  divergence is real and reproducible: `-l` (literal, disables key-name
+  lookup) and a plain named key appear to need to resolve something
+  relative to "the current client" (its terminal encoding/mode?) that a
+  fresh, one-shot, unattached `tmux <cmd> -t <name>` script invocation
+  does not itself provide -- unlike `-X` (explicit copy-mode command)
+  invocations of the same kind (`copy-mode`, `send-keys -X scroll-up`,
+  `send-keys -X cancel`), which were fast and safe as detached script
+  calls in every no-client test run.
+- **Affected files**: `server/mcp/tmux.js` (`sendLiteral`, `sendEnter`,
+  `sendNamedKeys`, `sendHexKeys`) -- the code paths every MCP tool that
+  types/sends keys ultimately goes through.
+- **Detection method**: Deliberately reproduced the exact "human mid-scroll,
+  agent sends a command" race by hand in a scratch tmux session before
+  writing any product code, first with no attached client (`tmux
+  new-session -d`, no client ever), then with a real pty-backed client
+  (`script -qc "tmux attach-session -t X" /dev/null &`) -- the second
+  scenario is what actually surfaced the hang, which the first scenario's
+  clean "no current client" error had not predicted at all. A raw
+  WebSocket-upgrade handshake to a real `ttyd` process was also tried to
+  get an even more faithful "real ttyd client" reproduction, but `tmux
+  list-clients` showed ttyd never actually registered as attached from
+  that alone (it needs its own subprotocol handshake beyond a bare WS
+  upgrade) -- so the real-ttyd-client condition specifically remains
+  empirically unconfirmed either way, not just untested.
+- **Correction**: `server/mcp/tmux.js`'s `sendLiteral`/`sendEnter`/
+  `sendNamedKeys`/`sendHexKeys` now call a new `exitCopyModeIfActive()`
+  helper first, unconditionally, forcing the pane back to live before
+  ever reaching the unsafe code path. The new copy-mode primitives
+  themselves (`isInCopyMode`/`enterCopyMode`/`exitCopyModeIfActive`/
+  `scrollCopyMode`) use a 2s-bounded `execFileSync` (`tmuxBounded`),
+  specifically because the real-client condition for even the `-X` path
+  couldn't be fully verified safe -- see decision-log.md.
+- **Prevention rule**: Before assuming any `tmux` subcommand's behavior
+  from a detached/scripted `execFileSync` call is the same regardless of
+  whether a real client happens to be attached to that session, test both
+  conditions explicitly -- a `tmux new-session -d` with no client ever
+  attached is NOT a faithful stand-in for "a real ttyd/browser session",
+  and this codebase's actual production topology always has a real
+  attached client. Any new synchronous `execFileSync`/`tmux` call whose
+  safety under a real attached client is not independently confirmed
+  should get an explicit timeout, since `execFileSync` has none by default
+  and a hang blocks this entire single-threaded Node process, not just the
+  one call.
+
+---
+
 ### [2026-07-29-023] New-session navigation raced ttyd's own startup, permanently breaking the first request with no retry
 - **Timestamp**: 2026-07-29 15:35 UTC
 - **Summary**: After deploying the merged Session Manager architecture live, the Playwright suite showed 21-23/55 tests failing, always the same tests across independent full runs, and always the ones that create a session via the real UI (`createSessionViaUi`, i.e. clicking "+ Create New Session") rather than the raw API (`apiCreateSession`) -- `mcp-tools.spec.js` (API-only) and `session-lifecycle.spec.js` (list-only, no real terminal render) passed cleanly every time, which was the key clue. An isolated single-test run (no other tests, no cumulative load) reproduced the failure 100% of the time, ruling out load-related flakiness. Manually clicking through the same flow with `page.goto(...).../term/<id>/` (rather than the client's own `window.location.href` navigation) worked fine, which was the second clue.

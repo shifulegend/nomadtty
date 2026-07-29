@@ -68,6 +68,7 @@ function stripAnsi(str) {
  */
 function captureTerminalSocket(page) {
   let output = '';
+  let sentInput = '';
   const resizeFrames = [];
   let socketPromiseResolve;
   const socketPromise = new Promise((resolve) => { socketPromiseResolve = resolve; });
@@ -80,8 +81,14 @@ function captureTerminalSocket(page) {
     });
     ws.on('framesent', (f) => {
       const buf = toBuffer(f.payload);
-      if (buf.length && buf[0] === RESIZE_CMD) {
+      if (!buf.length) return;
+      if (buf[0] === RESIZE_CMD) {
         try { resizeFrames.push(JSON.parse(buf.slice(1).toString('utf8'))); } catch (_e) { /* ignore */ }
+      } else if (buf[0] === OUTPUT_CMD) {
+        // Client -> server frames also use the "0" prefix for real PTY
+        // input (see kb.js's send()) -- tracked separately from output so
+        // tests can assert a gesture sent literally zero bytes to the PTY.
+        sentInput += buf.slice(1).toString('utf8');
       }
     });
     socketPromiseResolve(ws);
@@ -178,6 +185,7 @@ function captureTerminalSocket(page) {
       });
     },
     getOutput: () => output,
+    getSentInput: () => sentInput,
     getResizeFrames: () => resizeFrames.slice(),
     dispose: () => page.off('websocket', listener),
   };

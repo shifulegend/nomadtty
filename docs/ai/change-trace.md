@@ -17,6 +17,55 @@
 
 ---
 
+### [2026-07-29] Re-enabled mobile touch-scroll via real tmux copy-mode, with MCP self-heal
+- **Timestamp**: 2026-07-29 17:00-18:30 UTC
+- **Change**: Added a sticky "Hist" toolbar toggle (`src/kb.js`) that drives
+  real tmux copy-mode server-side instead of xterm.js's (nonexistent, under
+  tmux) client-side scrollback. New primitives in `server/mcp/tmux.js`
+  (`isInCopyMode`, `enterCopyMode`, `exitCopyModeIfActive`, `scrollCopyMode`,
+  via a new timeout-bounded `tmuxBounded()`), a new
+  `POST /api/sessions/:id/copy-scroll` route in `server/session-manager.js`,
+  and `kb.js`'s `initTouchScroll` now maps swipe distance to scroll-line
+  requests while "Hist" is on. Every MCP "send" tool
+  (`sendLiteral`/`sendEnter`/`sendNamedKeys`/`sendHexKeys`) now calls
+  `exitCopyModeIfActive()` first, unconditionally.
+- **Rationale**: User reported being unable to scroll a session with long
+  output; investigation traced it to the intentional 2026-07-29-018 fix
+  (mistakes.md) which disabled touch-scroll entirely rather than fixing it.
+  User explicitly required the reimplementation not interfere with the MCP
+  server, which acts on the same tmux panes concurrently — see
+  decision-log.md's matching entry for the full design and the empirical
+  investigation (mistakes.md 2026-07-29-024) that shaped the self-heal.
+- **Affected areas**: `src/kb.js`, `server/mcp/tmux.js`,
+  `server/session-manager.js`, `.claude/rules/config.md` (new
+  `SESSION_MANAGER_SCROLL_LINES_MAX` env var), `CLAUDE.md` (updated the
+  now-stale "touch-scroll is disabled" hard invariant), `README.md`
+  (Keyboard Toolbar Reference table), `tests/helpers/ws-capture.js` (new
+  `getSentInput()` to assert zero PTY bytes sent by a gesture),
+  `tests/specs/android-mobile-ux.spec.js` (new Hist-toggle test),
+  `tests/specs/mcp-tools.spec.js` (new "touch-history (copy-mode) / MCP
+  interop" describe block).
+- **Related decisions**: docs/ai/decision-log.md's matching 2026-07-29 entry.
+- **Related mistakes**: docs/ai/mistakes.md 2026-07-29-018 (original
+  corruption bug), 2026-07-29-024 (the copy-mode/send-keys hang finding).
+- **Verification**: `node --check` passes on all 3 changed server/client
+  files. The core "self-heal wins over a concurrent human scroll" claim was
+  verified DIRECTLY (bypassing HTTP/MCP/Playwright): a script drove
+  `enterCopyMode()` then `sendLiteral()`/`sendEnter()` (the exact functions
+  `type_command` calls) in-process against a real tmux session and confirmed
+  copy-mode was force-exited (166ms) and the command produced correct real
+  output. The full Playwright suite (including the two new spec files' new
+  tests) was NOT confirmed clean end to end: this host was under sustained
+  heavy load (7+ on 2 cores, <100MB free RAM) for this entire session,
+  unrelated to this change, and multiple attempts to boot even a bare test
+  server instance timed out just trying to bind a port. One real bug was
+  found and fixed in the process (a flawed "output never seen before"
+  assertion in the new Hist-toggle test, and a send_keystroke test marker
+  too long for the 32-key cap) -- both fixed before this commit, but not
+  re-run to green. **Owed**: a clean `cd tests && npx playwright test` run
+  once host load is normal, before fully trusting the new tests as passing
+  (not just correct-looking).
+
 ### [2026-07-29] New tmux sessions now start in the deploy user's home directory
 - **Timestamp**: 2026-07-29 18:40 UTC
 - **Change**: `server/session-manager.js`'s `spawnSession()` now passes

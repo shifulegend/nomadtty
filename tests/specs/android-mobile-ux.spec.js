@@ -180,6 +180,69 @@ test('mobile toolbar: CTRL modifier, Fn row toggle, and zoom all function on a t
   await capture.waitForOutputLine('still_alive_after_zoom');
 });
 
+test('Hist toggle reveals real scrollback via tmux copy-mode and never sends a PTY input byte', async ({ page }) => {
+  const capture = captureTerminalSocket(page);
+  await createSessionViaUi(page);
+  await waitForTerminalReady(page);
+  await capture.waitForSocket();
+
+  // capture.getOutput() accumulates every byte ever received on the WS for
+  // the whole test, so it already contains "hist_marker_1" once from the
+  // original typed echo -- "absent before" is not a usable signal. Instead,
+  // prove the copy-mode redraw genuinely repainted old content by requiring
+  // a SECOND independent occurrence of the same marker after scrolling.
+  await page.click('.xterm-screen');
+  await page.keyboard.type('for i in $(seq 1 200); do echo hist_marker_$i; done');
+  await page.keyboard.press('Enter');
+  await capture.waitForOutputLine('hist_marker_200');
+
+  await page.locator('#kb-hist').tap();
+  await expect(page.locator('#kb-hist')).toHaveClass(/on/);
+
+  // Simulate a downward swipe (finger moves down the screen) -- kb.js maps
+  // that to tmux's "scroll-up" (reveal older history), see src/kb.js's
+  // initTouchScroll comment for the direction rationale.
+  await page.evaluate(() => {
+    const xterm = document.querySelector('.xterm');
+    const rect = xterm.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const startY = rect.top + rect.height / 2;
+    const mk = (y) => new Touch({ identifier: 42, target: xterm, clientX: x, clientY: y });
+    xterm.dispatchEvent(new TouchEvent('touchstart', { touches: [mk(startY)], changedTouches: [mk(startY)], bubbles: true, cancelable: true }));
+    for (let i = 1; i <= 12; i++) {
+      const y = startY + (500 * i) / 12; // net downward drag
+      xterm.dispatchEvent(new TouchEvent('touchmove', { touches: [mk(y)], changedTouches: [mk(y)], bubbles: true, cancelable: true }));
+    }
+    xterm.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [mk(startY + 500)], bubbles: true, cancelable: true }));
+  });
+
+  // The redraw arrives over the same live WS ttyd already holds (tmux
+  // pushes it to every attached client, ttyd included) -- no separate
+  // fetch/render path exists client-side for this. A SECOND occurrence of
+  // the marker (the first was the original typed echo) proves the
+  // scrolled-into-history content genuinely repainted, not just that the
+  // marker was present at some point in this test's lifetime.
+  await capture.waitForOutputCount('hist_marker_1\r\n', 2, 8000);
+
+  // The entire gesture -- toggling Hist on, swiping, and (below) toggling
+  // it back off -- must never put a single byte on the PTY input channel.
+  // This is the structural guarantee that replaces the old wheel-dispatch
+  // bug (mistakes.md 2026-07-29-018): scrolling now goes through a
+  // completely separate HTTP path (postScroll -> /api/sessions/:id/copy-scroll),
+  // never window._S.send().
+  expect(capture.getSentInput()).toBe('');
+
+  await page.locator('#kb-hist').tap();
+  await expect(page.locator('#kb-hist')).not.toHaveClass(/on/);
+
+  // Exiting Hist must return to a genuinely live, working terminal.
+  await page.click('.xterm-screen');
+  await page.keyboard.type('echo hist_off_still_alive');
+  await page.keyboard.press('Enter');
+  await capture.waitForOutputLine('hist_off_still_alive');
+  expect(capture.getSentInput()).not.toBe(''); // real typing after Hist-off does send bytes, as expected
+});
+
 test('toolbar buttons ignore drag/scroll gestures but still register a genuine stationary tap', async ({ page }) => {
   await createSessionViaUi(page);
   await waitForTerminalReady(page);
