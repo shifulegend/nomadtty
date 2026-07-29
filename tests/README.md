@@ -46,6 +46,11 @@ No manual server startup is needed.
   `waitForSelector` (`waitForTerminalReady` in `helpers/session-manager.js`)
   before any interaction — this only replaces "how do we read what's on
   screen," not "how do we know the screen exists yet."
+  Use **`waitForOutputLine(line)`** (not raw substring counting) whenever a
+  test needs to prove a command actually *ran*, not just that it was typed —
+  it matches `line` only as a complete line on its own, which is immune to a
+  terminal redraw splitting the *echoed input* text mid-word (see
+  `docs/ai/mistakes.md` 2026-07-29-009 for the flake this fixed).
 - `specs/session-lifecycle.spec.js` — non-interactive Session Manager states:
   empty state, list populating, a closed session disappearing, multiple
   sessions, background polling.

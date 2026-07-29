@@ -1,6 +1,6 @@
 # Claude Code — Core Rules
 <!-- adapter; canonical source: docs/ai/engineering-rules.md -->
-<!-- last updated: 2026-06-20 -->
+<!-- last updated: 2026-07-29 -->
 
 ## Modularity
 - One responsibility per file. `src/kb.js` = toolbar UI + PTY input only.
@@ -8,12 +8,17 @@
 - New toolbar features: extend NAV/FK/FK_CODES tables; do not duplicate send logic.
 - nginx config changes must not break the three-element sub_filter chain
   (viewport meta → WS hook → kb.js script tag). Keep them in that order.
+- `server/mcp/**` — one file per concern, do not blur: `tmux.js` (only file that shells
+  out), `validation.js` (input shape checks only), `auth.js` (authn/boot policy only),
+  `tools.js` (wires validated input → tmux.js → result shape), `index.js` (HTTP/transport
+  plumbing only).
 
 ## No hardcoding
 - Port → `TTYD_PORT` env var (default 47821)
 - Domain → `NOMADTTY_HOST` env var (default `_`)
 - Web root `/var/www/nomadtty` defined in nginx config + install.sh only
 - Zoom levels / key sequences / button labels → defined in tables at top of IIFE
+- MCP server ports/limits → env vars, never literals. Full table in `.claude/rules/config.md`.
 
 ## Code organisation
 - `src/kb.js`: single IIFE, no `import`/`export`, no dependencies

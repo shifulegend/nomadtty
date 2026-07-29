@@ -2,8 +2,10 @@
 *.swo
 .DS_Store
 node_modules/
-package.json
-package-lock.json
+
+# package.json / package-lock.json are tracked at the repo root and under
+# tests/ (both now have real npm dependencies: the MCP server backend and
+# the Playwright suite, respectively) — see docs/ai/decision-log.md.
 
 # Playwright intermediate video files and palette frames (keep final GIFs/PNGs)
 docs/assets/_videos/

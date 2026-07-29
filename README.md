@@ -242,6 +242,76 @@ dependencies, no build step, and no bundler.
 
 ---
 
+## Session Manager & MCP Server
+
+> **Note:** this is a separate, newer Node.js backend (`server/**`) alongside the
+> nginx/ttyd setup above. It supports multiple concurrent named terminal sessions and
+> exposes them to AI agents over MCP. It is not yet wired into `Dockerfile`/`install.sh`
+> — run it directly with Node.
+
+### Quick start
+
+```bash
+npm install
+MCP_AUTH_TOKEN=$(openssl rand -hex 32) node server/main.js
+```
+
+This starts two listeners in one process:
+
+| Listener | Default bind | Purpose |
+|---|---|---|
+| Session Manager | `127.0.0.1:4000` | Multi-session UI/API + terminal reverse proxy (no auth — loopback only) |
+| MCP server | `0.0.0.0:4200` | Terminal-control tools for AI agents (bearer-token auth **required**) |
+
+The MCP server refuses to start bound to a non-loopback address without
+`MCP_AUTH_TOKEN` set (set `MCP_ALLOW_INSECURE=1` to explicitly override for local
+testing — never in production). See `.claude/rules/config.md` for the full list of
+`MCP_*` / `SESSION_MANAGER_*` / `TTYD_BASE_PORT` environment variables.
+
+### MCP tools
+
+| Tool | Purpose |
+|---|---|
+| `get_screenshot` | Textual/ANSI snapshot of a terminal's current viewport (see note below on why this is text, not pixels) |
+| `scroll_buffer` | Scroll a terminal's view up/down by lines or pages; position persists per terminal |
+| `type_command` | Inject literal text into a terminal's stdin, optionally submitting with Enter |
+| `send_keystroke` | Send named key combinations (`C-c`, `M-F4`, `Enter`, …) or raw hex-encoded bytes |
+| `read_terminal_contents` | Read the buffer as `full` / `head` / `tail`; `follow=true` streams new output live over SSE |
+| `get_process_status` | Process tree (PID, CPU%, mem%, state) for everything running in a terminal's shell |
+| `list_active_ports` | Host-wide TCP/UDP listening sockets — check a dev server actually started |
+
+NomadTTY's terminals are text-mode (ttyd/tmux), so `get_screenshot` returns an
+ANSI/text capture rather than a pixel image — there's no server-side pixel renderer in
+this architecture (see `docs/ai/decision-log.md`).
+
+### Connecting an MCP client
+
+```bash
+curl -X POST http://<host>:4200/mcp \
+  -H "Authorization: Bearer $MCP_AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"my-agent","version":"1.0"}}}'
+```
+
+The response includes an `Mcp-Session-Id` header; pass it back as the
+`Mcp-Session-Id` header on subsequent `tools/list` / `tools/call` requests to the same
+`/mcp` endpoint.
+
+### Security model
+
+`type_command`/`send_keystroke` grant the same power as typing at the terminal
+directly — command content is not, and cannot usefully be, sandboxed without
+defeating the tool's purpose. The security boundary is authentication and network
+exposure:
+- A bearer token (`MCP_AUTH_TOKEN`) is required for any non-loopback bind.
+- `type_command` runs a best-effort denylist of obviously destructive one-liners
+  (`rm -rf /`, fork bombs, `mkfs`, …) as defense-in-depth — not a sandbox, and
+  disableable via `MCP_DENYLIST_ENABLED=0` if it produces a false positive.
+- Only give `MCP_AUTH_TOKEN` to agents you'd trust with a real shell on this host.
+
+---
+
 ## The VirtualKeyBar
 
 Executing complex terminal commands on mobile devices is painful because software

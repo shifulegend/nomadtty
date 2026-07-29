@@ -77,6 +77,12 @@ function captureTerminalSocket(page) {
      * anything. Anything asserting on genuine command *output* (as
      * opposed to "the input was accepted") must require a second
      * occurrence, or it can pass on the echoed keystrokes alone.
+     *
+     * Prefer waitForOutputLine() over this for "did the command actually
+     * run" checks — a terminal redraw (e.g. triggered by a resize) can
+     * interleave escape sequences into the middle of the echoed *input*
+     * text, splitting it across two writes and permanently preventing a
+     * second whole-substring match even though the command ran fine.
      */
     waitForOutputCount(substring, count, timeout = 10000) {
       const start = Date.now();
@@ -87,6 +93,34 @@ function captureTerminalSocket(page) {
             return reject(new Error(
               `Timed out waiting for PTY output to contain ${JSON.stringify(substring)} ` +
               `at least ${count} time(s).\n` +
+              `Last 300 chars received: ${JSON.stringify(output.slice(-300))}`
+            ));
+          }
+          setTimeout(check, 25);
+        })();
+      });
+    },
+    /**
+     * Poll accumulated PTY output until `line` appears as a complete line
+     * on its own (preceded by a newline or the start of the buffer,
+     * followed immediately by \r\n) — i.e. specifically the shell's real
+     * stdout line, not "echo <line>" being echoed back as typed input.
+     * This is the robust replacement for waitForOutputCount(line, 2):
+     * unlike raw occurrence-counting, it isn't fooled by a mid-typing
+     * terminal redraw splitting the echoed *input* text into two pieces
+     * (which would otherwise make a second whole-substring match
+     * impossible even though the command executed correctly) — the real
+     * stdout write isn't subject to that same splitting.
+     */
+    waitForOutputLine(line, timeout = 10000) {
+      const pattern = new RegExp(`(?:^|\\r?\\n)${line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\r\\n`);
+      const start = Date.now();
+      return new Promise((resolve, reject) => {
+        (function check() {
+          if (pattern.test(output)) return resolve(output);
+          if (Date.now() - start > timeout) {
+            return reject(new Error(
+              `Timed out waiting for PTY output to contain the line ${JSON.stringify(line)} on its own.\n` +
               `Last 300 chars received: ${JSON.stringify(output.slice(-300))}`
             ));
           }

@@ -1,6 +1,6 @@
 # NomadTTY — Decision Log
 <!-- canonical source of truth | newest entries first -->
-<!-- last updated: 2026-06-20 -->
+<!-- last updated: 2026-07-29 -->
 
 ## Entry Template
 ```
@@ -14,6 +14,92 @@
 ```
 
 ---
+
+### [2026-07-29] MCP tools operate on tmux directly; session creation eagerly creates the tmux session
+- **Context**: The Session Manager's `spawnSession()` only started ttyd; ttyd itself lazily execs its wrapped
+  `tmux new-session -A -s <id>` command on the *first* WebSocket connection. MCP tools (get_screenshot,
+  type_command, etc.) need to act on a session the moment an agent creates it via `/api/sessions`, with no
+  browser ever involved — but the tmux session (and therefore anything to operate on) didn't exist yet.
+- **Decision**: `spawnSession()` now runs `tmux new-session -d -s <id>` itself, synchronously, before
+  spawning ttyd. ttyd's own `-A` flag then just attaches to that already-running session instead of
+  creating a second one, so browser-driven behavior is unchanged.
+- **Alternatives considered**: Having the MCP server open a throwaway WebSocket to ttyd itself just to force
+  the lazy spawn — rejected as fragile and roundabout compared to creating the tmux session directly.
+- **Rationale**: MCP tools are meant to let an agent drive a terminal with no human ever opening a browser
+  tab. That requires the tmux session to exist immediately on creation, not on first "Join."
+- **Consequences**: `spawnSession()` can now throw synchronously (tmux missing/broken) — the `/api/sessions`
+  POST handler wraps it in try/catch and returns 500 rather than crashing the process.
+- **Owner**: claude (session implementing the MCP server)
+
+### [2026-07-29] MCP server is a second HTTP listener, not a route on the Session Manager's server
+- **Context**: Needed to expose terminal-control tools over MCP's Streamable HTTP transport, reachable by
+  LAN agents. The Session Manager's existing HTTP server binds to 127.0.0.1 only and has no authentication.
+- **Decision**: `server/mcp/index.js` runs its own `http.Server` on a separate port (`MCP_PORT`, default
+  4200), bound to `MCP_HOST` (default `0.0.0.0`), inside the same Node process as the Session Manager. Both
+  share the same in-memory `sessions` Map directly (no network hop) — see `server/main.js`.
+- **Alternatives considered**: Adding `/mcp` as a route on the existing Session Manager server and widening
+  its bind address to `0.0.0.0` — rejected because that would have silently exposed the unauthenticated
+  Session Manager UI/API (create/list/close sessions, full terminal proxy) to the LAN as a side effect of
+  making only the MCP endpoint LAN-reachable.
+- **Rationale**: Keeping the two listeners separate lets the MCP server (which enforces a bearer token, see
+  below) be LAN-facing without changing the Session Manager's existing security posture at all.
+- **Consequences**: Two ports to configure/document instead of one. `server/main.js` is the new composition
+  root that starts both; `server/session-manager.js` still runs standalone unchanged (required by
+  `tests/playwright.config.js`).
+- **Owner**: claude (session implementing the MCP server)
+
+### [2026-07-29] MCP auth is a mandatory bearer token, not command-content filtering
+- **Context**: `type_command`/`send_keystroke` grant the same power as typing at the terminal directly —
+  the tool's entire purpose is running arbitrary commands, so content-level sandboxing would defeat the
+  tool. Something still has to gate who can call these tools at all, especially once LAN-reachable.
+- **Decision**: `server/mcp/auth.js` requires `Authorization: Bearer <MCP_AUTH_TOKEN>` on every `/mcp`
+  request (constant-time compare). The server refuses to boot bound to a non-loopback host without
+  `MCP_AUTH_TOKEN` set, unless `MCP_ALLOW_INSECURE=1` is explicitly passed. `validation.js` additionally
+  applies a best-effort denylist of obviously destructive one-liners (`rm -rf /`, fork bombs, etc.) to
+  `type_command` as defense-in-depth — documented as non-bypass-proof, not a sandbox.
+- **Alternatives considered**: Filtering/allowlisting command content as the primary defense — rejected as
+  both incomplete (trivially bypassable) and self-defeating (a terminal tool that can't run most commands
+  isn't useful).
+- **Rationale**: The real security boundary for a tool whose job is "run what the agent says" is "who is
+  allowed to connect," not "what did they say." This mirrors ttyd/tmux's own trust model (anyone who can
+  reach the browser UI already has a full shell) extended to MCP callers.
+- **Consequences**: Operators MUST set `MCP_AUTH_TOKEN` to a long random value before exposing `MCP_HOST` to
+  the LAN. `MCP_ALLOW_INSECURE=1` exists for local dev convenience and must never be used in production.
+- **Owner**: claude (session implementing the MCP server)
+
+### [2026-07-29] get_screenshot returns a textual/ANSI snapshot, not a pixel image
+- **Context**: The MCP tool spec asked for a `get_screenshot` tool "capturing the current visual state" of
+  a terminal.
+- **Decision**: `get_screenshot` returns `tmux capture-pane`'s text (optionally with `-e` for ANSI escape
+  codes) for the pane's current viewport, not a rendered pixel image.
+- **Alternatives considered**: Rendering a real PNG via a headless browser pointed at the ttyd page —
+  rejected: it would require adding a permanent Chromium dependency to the production backend (this project
+  already avoids that outside the Playwright dev/test suite), pay a browser-launch cost per call, and still
+  ultimately just re-render text ttyd already emits as ANSI.
+- **Rationale**: NomadTTY's terminals are text-mode (ttyd/tmux); there is no server-side pixel renderer in
+  this architecture. A textual/ANSI snapshot is the accurate, honest representation of "current visual
+  state" for a text terminal, and is what every other tool in this set already consumes/produces.
+- **Consequences**: If true pixel screenshots are wanted later, it's a separate, explicit feature addition
+  (headless browser dependency) — not a variant of this tool.
+- **Owner**: claude (session implementing the MCP server)
+
+### [2026-07-29] First production npm dependency: @modelcontextprotocol/sdk + zod
+- **Context**: Needed a spec-correct MCP "Streamable HTTP" transport (JSON-RPC framing, session lifecycle,
+  SSE upgrade, resumability semantics). The backend had been zero-runtime-dependency by design/convention
+  (see the 2026-06-20 "No bundler / no build step" entry), though that constraint was specifically about
+  `src/kb.js` being injected into a browser page with no bundler available — it does not technically apply
+  to a standalone Node backend service.
+- **Decision**: Added a root `package.json` with `@modelcontextprotocol/sdk` and `zod` as runtime
+  dependencies. Hand-rolling JSON-RPC/SSE session framing instead was considered and rejected.
+- **Alternatives considered**: Hand-writing the MCP protocol (JSON-RPC + SSE + session headers) directly on
+  the existing zero-dependency `http.createServer` pattern.
+- **Rationale**: The official SDK is maintained specifically for this protocol and already correctly
+  handles session IDs, resumable SSE streams, and JSON-RPC edge cases; reimplementing it by hand for a
+  first-party feature carries much higher bug risk than the (well-justified) dependency.
+- **Consequences**: `npm install` at the repo root is now required before running `server/main.js`. The
+  root `.gitignore` no longer blanket-ignores `package.json`/`package-lock.json` (it did, as a leftover from
+  the zero-dependency era) — both are now tracked, same as `tests/package.json` already was.
+- **Owner**: claude (session implementing the MCP server)
 
 ### [2026-06-25] Add Mermaid architecture diagram to README
 - **Context**: README had an ASCII art architecture diagram. Mermaid is rendered natively

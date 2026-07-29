@@ -1,7 +1,76 @@
 # NomadTTY — Mistake Log
 <!-- canonical source of truth | newest entries first -->
-<!-- last updated: 2026-06-20 -->
+<!-- last updated: 2026-07-29 -->
 <!-- update immediately when a mistake is found; propagate lessons to engineering-rules.md -->
+
+---
+
+### [2026-07-29-009] Playwright: "wait for 2 occurrences" flaked when a redraw split the echoed input
+- **Timestamp**: 2026-07-29 04:15 UTC
+- **Summary**: `tests/helpers/ws-capture.js`'s `waitForOutputCount(marker, 2)` (added to distinguish a
+  command's real stdout from the PTY's echo of what was typed) intermittently timed out in
+  `specs/terminal-interaction.spec.js`'s viewport-resize test. Root cause: the resize itself triggered a
+  terminal redraw that landed mid-typing, splitting the echoed *input* text into two writes (e.g.
+  `"...resiz"` then a redraw then `"e"`) — so the exact substring never appeared a second time as one
+  contiguous run, even though the command executed and its real stdout line was intact and present.
+- **Root cause**: Raw substring occurrence-counting assumes both the echoed input and the real output are
+  each written as one contiguous chunk. A redraw (resize, tmux status-bar refresh, prompt reflow, etc.) can
+  interleave escape sequences into the *input* echo mid-word; the real stdout write is not subject to the
+  same interleaving since it isn't happening concurrently with keystroke-by-keystroke typing.
+- **Affected files**: `tests/helpers/ws-capture.js`, `tests/specs/terminal-interaction.spec.js`,
+  `tests/specs/session-persistence.spec.js`
+- **Detection method**: Ran the suite repeatedly back-to-back (not just once) after an unrelated backend
+  change and caught an intermittent failure; the captured buffer in the error message showed the marker
+  text visibly split by an escape sequence mid-word.
+- **Correction**: Added `waitForOutputLine(line)` — matches `line` only when it appears as a complete line
+  on its own (preceded by a newline/buffer-start, followed by `\r\n`), which uniquely identifies the real
+  stdout write regardless of whether the *input* echo got split by a redraw. Replaced all
+  `waitForOutputCount(x, 2)` call sites with it; kept `waitForOutputCount` for cases that only need a
+  presence check, not a genuine-execution proof.
+- **Prevention rule**: When asserting "a command genuinely produced output" (not just "input was accepted")
+  against a raw PTY stream, match the output as its own complete line, not as a repeated substring count —
+  and always run a new terminal-output assertion strategy several times back-to-back before trusting a
+  single green run, especially around resize/redraw-triggering actions.
+
+### [2026-07-29-008] read_terminal_contents "tail" returned blank lines on a fresh session
+- **Timestamp**: 2026-07-29 03:50 UTC
+- **Summary**: `captureTail(tmuxName, n)` computed its `tmux capture-pane -S <start>` start line as
+  `pane_height - n`, i.e. anchored to the pane's fixed geometric height. On a freshly created session (only
+  a prompt line printed), most of that geometric height is unused blank space below the cursor, so the
+  "last N lines" came back as N blank lines instead of the actual last N lines of real output. The MCP
+  server's `read_terminal_contents` follow-mode diffing was built on top of this, so it silently never
+  detected real content changes either (comparing blank-vs-blank forever).
+- **Root cause**: tmux's `capture-pane -S/-E` row numbering spans the pane's full rendered height
+  regardless of how much of it is actually populated; "last N lines of real content" and "last N rows of
+  the rendered viewport" are only the same thing once the pane happens to be completely full.
+- **Affected files**: `server/mcp/tmux.js` (`captureTail`), `server/mcp/tools.js` (`read_terminal_contents`
+  follow mode, `full` mode's total-line estimate)
+- **Detection method**: Manually drove the MCP server's `read_terminal_contents`/`follow` mode end-to-end
+  against a freshly created session and saw only blank content, then confirmed via `tmux capture-pane -S 0
+  -E <n>` by hand that real content sat at low row numbers while the "tail" math was reading from high ones.
+- **Correction**: Anchor `captureTail` on `#{cursor_y}` (the cursor's current row — i.e., where the last
+  real output line sits) instead of `#{pane_height}`: `start = cursorY - n + 1`, `end = cursorY`.
+- **Prevention rule**: Any tmux capture-pane range meant to represent "the end of real content" must be
+  anchored on `#{cursor_y}`, never on `#{pane_height}` — height describes the rendered viewport, not how
+  much of it has been written to.
+
+### [2026-07-29-007] tmux `-F` format strings silently replace literal tabs with `_`
+- **Timestamp**: 2026-07-29 03:45 UTC
+- **Summary**: Used `#{history_size}\t#{pane_width}\t#{pane_height}\t#{pane_pid}` (a literal tab between
+  fields) as a `tmux display-message -F` format string, intending to split the result on tabs. tmux returned
+  `0_80_24_28043` — every tab character was replaced with `_`, so splitting on `\t` produced one field
+  containing the whole underscore-joined string, and `Number()` on it produced `NaN`/`undefined` for every
+  field after the first, which `JSON.stringify` then silently dropped from tool output entirely.
+- **Root cause**: tmux's format-string engine sanitizes literal control characters (including a literal tab
+  byte appearing directly in the format string) to `_` before returning output — it does not preserve them
+  as a delimiter the way a shell/printf format string would.
+- **Affected files**: `server/mcp/tmux.js` (`getPaneInfo`)
+- **Detection method**: `get_screenshot`'s tool output was missing `width`/`height` fields entirely, with no
+  error thrown (JSON.stringify just omits `undefined` values); reproduced by calling `getPaneInfo` directly
+  in Node and comparing against a manual `tmux display-message` invocation.
+- **Correction**: Use `|` (or any character tmux won't sanitize) as the field separator instead of `\t`.
+- **Prevention rule**: Never use a literal tab (or other control character) as a field separator in a tmux
+  `-F` format string. Use a plain printable delimiter like `|`.
 
 ## Entry Template
 ```

@@ -62,11 +62,23 @@ function genId() {
 /* ── Spawn a new ttyd+tmux session ──
  * tmux session name === terminal_id, so `tmux ls` / kill-session are
  * unambiguous. --base-path scopes ttyd's internal asset + WS URLs to
- * /term/<id>/, so the reverse proxy below needs zero path rewriting. */
+ * /term/<id>/, so the reverse proxy below needs zero path rewriting.
+ *
+ * The tmux session itself is created here, up front, with `new-session
+ * -d` (detached) -- NOT left for ttyd to create lazily on first browser
+ * connect. ttyd only execs its wrapped command (`tmux new-session -A -s
+ * <id>`, below) once a client actually opens the WebSocket, so without
+ * this the tmux session -- and therefore anything the MCP server's tools
+ * operate on (see server/mcp/tmux.js) -- would not exist until a human
+ * opened the terminal in a browser at least once. `-A` in ttyd's own
+ * command then just attaches to the session created here rather than
+ * creating a second one, so browser behavior is unchanged either way. */
 function spawnSession(label) {
   const id = genId();
   const port = allocatePort();
   const basePath = '/term/' + id + '/';
+
+  execFileSync('tmux', ['new-session', '-d', '-s', id], { stdio: 'ignore' });
 
   const proc = spawn('ttyd', [
     '--port', String(port),
@@ -241,7 +253,16 @@ const server = http.createServer((req, res) => {
 
   if (p === '/api/sessions' && req.method === 'POST') {
     return readJsonBody(req, (_, body) => {
-      const entry = spawnSession(body && body.label);
+      let entry;
+      try {
+        entry = spawnSession(body && body.label);
+      } catch (err) {
+        /* spawnSession creates the tmux session synchronously (see its
+           comment) so a missing/broken tmux binary throws here rather
+           than surfacing async -- catch it so one bad request can't take
+           down the whole process. */
+        return sendJson(res, 500, { error: 'Failed to create session: ' + err.message });
+      }
       sendJson(res, 201, { id: entry.id, label: entry.label });
     });
   }
@@ -281,12 +302,33 @@ server.on('upgrade', (req, socket, head) => {
   proxyUpgrade(req, socket, head, entry.port);
 });
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log('NomadTTY session-manager listening on 127.0.0.1:' + PORT);
-});
-
 /* Ensure orphaned tmux servers / ttyd children don't survive a manager
    process crash or restart -- but NOT on a normal client navigating
    away from a terminal view, since that never reaches this process. */
-process.on('SIGTERM', () => { for (const id of sessions.keys()) closeSession(id); process.exit(0); });
-process.on('SIGINT', () => { for (const id of sessions.keys()) closeSession(id); process.exit(0); });
+function shutdownAllSessions() {
+  for (const id of sessions.keys()) closeSession(id);
+}
+
+/* Starts listening only -- no signal handling. A composition root
+ * (server/main.js) that runs this alongside other listeners in the same
+ * process calls this and then owns SIGTERM/SIGINT centrally, so shutdown
+ * of every subsystem is coordinated in one place rather than racing
+ * multiple independent handlers for the same signal. */
+function start() {
+  server.listen(PORT, '127.0.0.1', () => {
+    console.log('NomadTTY session-manager listening on 127.0.0.1:' + PORT);
+  });
+  return server;
+}
+
+module.exports = { sessions, spawnSession, closeSession, listSessions, shutdownAllSessions, start, server, PORT };
+
+/* Only when run directly (`node server/session-manager.js`) does this
+ * module start itself AND install its own SIGTERM/SIGINT handling --
+ * this exact combination is what tests/playwright.config.js's webServer
+ * relies on to boot and gracefully tear down the standalone server. */
+if (require.main === module) {
+  start();
+  process.on('SIGTERM', () => { shutdownAllSessions(); process.exit(0); });
+  process.on('SIGINT', () => { shutdownAllSessions(); process.exit(0); });
+}

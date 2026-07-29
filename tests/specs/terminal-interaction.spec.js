@@ -32,9 +32,9 @@ test('typing "echo" into the terminal produces the expected stdout', async ({ pa
   // The PTY runs in canonical mode, so it echoes typed keystrokes back
   // over the wire as they're typed — "marker\r\n" is already present the
   // instant Enter itself is echoed, before bash has executed anything.
-  // Requiring a *second* occurrence is what actually proves the shell ran
-  // `echo` and produced real stdout, not just that the input was accepted.
-  await capture.waitForOutputCount(marker, 2);
+  // waitForOutputLine specifically matches the marker appearing alone on
+  // its own line (the real stdout), not "echo <marker>" as typed input.
+  await capture.waitForOutputLine(marker);
 });
 
 test('a computed shell command returns the correct result on stdout', async ({ page }) => {
@@ -66,12 +66,15 @@ test('terminal input keeps working after the browser viewport is resized', async
 
   // Confirm the PTY is still writable post-resize, not just that a resize
   // frame was sent — a stale-but-reachable connection would pass the frame
-  // check while silently dropping keystrokes.
+  // check while silently dropping keystrokes. Note: a resize can itself
+  // trigger a terminal redraw that interleaves escape sequences into the
+  // middle of the *echoed input* text right as it's being typed, splitting
+  // it into two writes — waitForOutputLine still matches correctly because
+  // it targets the real (unsplit) stdout write, not raw substring counting.
   await page.click('.xterm-screen');
   await page.keyboard.type('echo still_alive_after_resize');
   await page.keyboard.press('Enter');
-  // Second occurrence = the real stdout line, not just the echoed keystrokes.
-  await capture.waitForOutputCount('still_alive_after_resize', 2);
+  await capture.waitForOutputLine('still_alive_after_resize');
 });
 
 test('control characters (Ctrl+C) reach the PTY and interrupt a running command', async ({ page }) => {
@@ -93,9 +96,9 @@ test('control characters (Ctrl+C) reach the PTY and interrupt a running command'
   // the blocked `sleep` ever reads them, so the mere presence of
   // "interrupted_ok" from typing is not proof of anything. If Ctrl+C
   // failed to interrupt, bash never regains the foreground to actually
-  // run this second `echo`, so its second (real stdout) occurrence would
-  // never arrive and this wait would time out instead of passing.
+  // run this second `echo`, so its real stdout line would never arrive
+  // and this wait would time out instead of passing.
   await page.keyboard.type('echo interrupted_ok');
   await page.keyboard.press('Enter');
-  await capture.waitForOutputCount('interrupted_ok', 2);
+  await capture.waitForOutputLine('interrupted_ok');
 });

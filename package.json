@@ -1,0 +1,18 @@
+{
+  "name": "nomadtty",
+  "private": true,
+  "version": "0.2.0",
+  "description": "NomadTTY backend — Session Manager (ttyd/tmux orchestration) and its Model Context Protocol server.",
+  "main": "server/main.js",
+  "scripts": {
+    "start": "node server/main.js",
+    "start:session-manager": "node server/session-manager.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.25.0 || ^4.0.0"
+  }
+}

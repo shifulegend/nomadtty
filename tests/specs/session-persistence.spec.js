@@ -34,10 +34,10 @@ test('leaving and rejoining a session preserves its scrollback', async ({ page }
   await page.click('.xterm-screen');
   await page.keyboard.type(`echo ${marker}`);
   await page.keyboard.press('Enter');
-  // Wait for the real stdout occurrence (not just the PTY's echo of what
-  // was typed — see helpers/ws-capture.js) so the command has genuinely
-  // run before we navigate away and rejoin.
-  await firstCapture.waitForOutputCount(marker, 2);
+  // Wait for the real stdout line (not just the PTY's echo of what was
+  // typed — see helpers/ws-capture.js) so the command has genuinely run
+  // before we navigate away and rejoin.
+  await firstCapture.waitForOutputLine(marker);
 
   // Leave via the manager UI's "Join" flow in reverse: navigate back to
   // "/", which does not close the session (only the explicit Close button

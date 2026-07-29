@@ -1,7 +1,14 @@
 # Claude Code — Infrastructure Rules
 <!-- adapter; canonical source: docs/ai/engineering-rules.md -->
-<!-- covers: Dockerfile, nginx, systemd, install.sh -->
-<!-- last updated: 2026-06-20 -->
+<!-- covers: Dockerfile, nginx, systemd, install.sh, server/main.js -->
+<!-- last updated: 2026-07-29 -->
+
+## Known gap: Session Manager + MCP server are not in Dockerfile/install.sh/systemd
+`Dockerfile`, `install.sh`, `docker-entrypoint.sh`, and `systemd/ttyd.service` all still
+describe the legacy single-ttyd model only. `server/session-manager.js` and
+`server/mcp/**` must currently be run manually (`npm install && node server/main.js`).
+Do not assume they're deployed just because the legacy files look complete — check
+`docs/ai/project-overview.md`'s current-state note before touching deployment infra.
 
 ## Dockerfile rules
 - Base: `ubuntu:24.04`. Do not switch to alpine without testing ttyd availability.

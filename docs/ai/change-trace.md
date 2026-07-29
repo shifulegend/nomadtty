@@ -1,6 +1,6 @@
 # NomadTTY — Change Trace
 <!-- canonical source of truth | newest entries first -->
-<!-- last updated: 2026-06-20 -->
+<!-- last updated: 2026-07-29 -->
 <!-- add an entry for every notable change: what, why, affected areas, commit -->
 
 ## Entry Template
@@ -16,6 +16,38 @@
 ```
 
 ---
+
+### [2026-07-29] MCP server: expose terminal sessions to local AI agents
+- **Timestamp**: 2026-07-29 04:00 UTC
+- **Change**:
+  - Added `server/mcp/**` — an MCP "Streamable HTTP" (JSON-RPC + SSE) server built on
+    `@modelcontextprotocol/sdk`, registering 7 tools: `get_screenshot`, `scroll_buffer`,
+    `type_command`, `send_keystroke`, `read_terminal_contents` (with a `follow` mode that
+    streams live output via MCP progress notifications over SSE), `get_process_status`,
+    `list_active_ports`.
+  - Added `server/main.js` as a composition root running the Session Manager and MCP
+    server together in one process, sharing the same in-memory `sessions` registry.
+  - Refactored `server/session-manager.js` to be requirable as a module (exports
+    `sessions`/`spawnSession`/`closeSession`/`listSessions`/`shutdownAllSessions`/`start`)
+    while remaining fully backward-compatible standalone (`node server/session-manager.js`
+    behaves identically, including for `tests/playwright.config.js`'s webServer).
+  - Changed `spawnSession()` to create the tmux session eagerly (`tmux new-session -d`)
+    instead of relying on ttyd's lazy spawn-on-first-connect, so MCP tools work on a
+    session immediately, with no browser ever attached.
+  - Added root `package.json`/`package-lock.json` (`@modelcontextprotocol/sdk`, `zod`) —
+    the first production npm dependency in this repo. Updated root `.gitignore`
+    accordingly (it previously blanket-ignored `package.json`/`package-lock.json`).
+  - 11/11 existing Playwright tests re-verified passing after every change in this set.
+- **Rationale**: Let local AI agents drive NomadTTY terminals (screenshot/scroll/type/
+  keystroke/read/process-status/port-list) over a standard, LAN-reachable protocol.
+- **Affected areas**: `server/mcp/**` (new), `server/main.js` (new), `server/session-manager.js`,
+  `package.json`/`package-lock.json` (new), `.gitignore`
+- **Related commit**: pending
+- **Related decisions**: see `docs/ai/decision-log.md` 2026-07-29 entries (four total: eager
+  tmux creation, MCP as a second listener, bearer-token auth model, screenshot-as-text,
+  first npm dependency)
+- **Related mistakes**: `docs/ai/mistakes.md` 2026-07-29-007 (tmux `-F` tab sanitization),
+  2026-07-29-008 (tail capture must anchor on `cursor_y`, not `pane_height`)
 
 ### [2026-06-25] Real-device screenshots — iPhone 15 Pro Max (OCR-masked)
 - **Timestamp**: 2026-06-25 14:00 UTC

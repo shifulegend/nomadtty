@@ -1,10 +1,16 @@
 # NomadTTY — Engineering Rules
 <!-- canonical source of truth | update this file first, then sync tool adapters -->
-<!-- last updated: 2026-06-20 -->
+<!-- last updated: 2026-07-29 -->
 
 ## Modularity Requirements
 - **One responsibility per file.** `kb.js` handles only toolbar UI and PTY input.
   nginx config handles only routing and injection. These concerns must never merge.
+- **`server/mcp/**` follows the same rule per file**: `tmux.js` is the only file that
+  shells out to the OS (tmux/ps/ss); `validation.js` only validates input shapes and
+  never touches a child process; `auth.js` only does authn/boot-policy checks;
+  `tools.js` only wires validated input to tmux.js and shapes results; `index.js`
+  only does HTTP/transport plumbing. Do not blur these boundaries — e.g. never call
+  `execFileSync` from `tools.js` or `index.js` directly.
 - **No logic in `docker-entrypoint.sh`** beyond service startup sequencing.
   Operational logic belongs in config files or environment variables.
 - **Functions in `kb.js` must be small** (< 30 lines each) and named for what they
@@ -29,6 +35,12 @@
 - Zoom levels, button labels, and key sequences in `kb.js` are defined in
   the `NAV`, `FK`, and `FK_CODES` tables at the top of the IIFE — not
   scattered through the button-building code.
+- **MCP server ports/limits** are env vars, never hardcoded: `MCP_PORT` (default
+  4200), `MCP_HOST` (default `0.0.0.0`), `MCP_AUTH_TOKEN` (no default — see
+  Security section), `MCP_ALLOW_INSECURE`, `MCP_MAX_TEXT_BYTES`,
+  `MCP_MAX_KEYS_PER_CALL`, `MCP_MAX_LINES_REQUEST`, `MCP_MAX_CAPTURE_LINES`,
+  `MCP_DENYLIST_ENABLED`, `MCP_DENYLIST_EXTRA`, `MCP_FOLLOW_MAX_SECONDS`. See
+  `server/mcp/validation.js`, `server/mcp/auth.js`, `server/mcp/tools.js`.
 
 ## Code Organisation Expectations
 - `src/kb.js` must remain a **single IIFE** with no external dependencies.
@@ -66,6 +78,20 @@
   1. `docker build -t nomadtty-test .` must succeed.
   2. `docker run --rm -p 18080:80 nomadtty-test` — open `http://localhost:18080`
      and confirm toolbar and terminal load.
+- After any change under `server/mcp/**` or `server/main.js`:
+  1. `npm install` at repo root, then `node server/main.js` with distinct
+     `SESSION_MANAGER_PORT`/`TTYD_BASE_PORT`/`MCP_PORT` env vars — must boot with
+     no port-conflict errors and log both listeners.
+  2. `curl -X POST http://<host>:<MCP_PORT>/mcp` with `initialize` then
+     `tools/list` (see README's MCP Server section for exact payloads) — must
+     return all 7 registered tools with valid JSON Schemas.
+  3. Create a session via `POST /api/sessions`, then exercise each tool against
+     it via `tools/call`; confirm `tmux capture-pane -t <id> -p` independently
+     agrees with what the tool reports.
+  4. Confirm auth: a request with no/incorrect `Authorization: Bearer` header
+     gets 401; requests with the correct token succeed.
+  5. Re-run `cd tests && npx playwright test` — must still be 11/11 passing,
+     since `server/session-manager.js` must keep working standalone unchanged.
 
 ## Definition of Done
 A task is done when:
@@ -105,3 +131,17 @@ A task is done when:
   because `$PATH` and credential dirs (e.g. `~/.claude/`) are relative to the wrong home.
 - Docker image: ttyd runs as root inside the container (no host user available). This
   is acceptable because the container is isolated and the risk is contained.
+- **MCP server**: `type_command`/`send_keystroke` grant full shell access, equivalent to
+  the terminal itself — the tool's job is running arbitrary commands, so its content
+  cannot be sandboxed without defeating its purpose. The security boundary is
+  authentication + network exposure, not content filtering:
+  - `MCP_AUTH_TOKEN` **must** be set before `MCP_HOST` is anything but loopback. The
+    server refuses to boot otherwise unless `MCP_ALLOW_INSECURE=1` is explicitly passed
+    (never use that flag in production). See `server/mcp/auth.js`.
+  - All tmux/ps/ss calls in `server/mcp/tmux.js` **must** use `execFile`/`execFileSync`
+    with an argv array — never `exec`/`shell: true`. This is what actually prevents
+    arbitrary input from being interpreted by a shell; content-level filtering
+    (`validation.js`'s denylist) is best-effort defense-in-depth only, not the boundary.
+  - `send_keystroke`'s "named" key mode is restricted to an explicit allowlist grammar
+    (`NAMED_KEY_RE` in `validation.js`) to stop a key value from being misparsed as a
+    tmux CLI flag — a different, narrower concern than shell injection.
