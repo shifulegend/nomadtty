@@ -5,6 +5,81 @@
 
 ---
 
+### [2026-07-29-017] Toolbar's floating Back button can fully cover the "A+" zoom button when the toolbar row is scrolled to its end
+- **Timestamp**: 2026-07-29 06:35 UTC
+- **Summary**: `#kb`'s row1 is a horizontally-scrolling flex row (`.kr{overflow-x:auto}`) whose natural content (CTRL through A+) is wider than any phone-sized viewport. `#back-btn` is a separate, always-fixed circle pinned to the top-right corner (`top:8px;right:8px`) with a higher z-index than the toolbar. Scrolling row1 all the way to its right end (a completely ordinary "swipe to see the last button" gesture) lands the row's last button, "A+", directly under `#back-btn`'s 34x34px circle -- confirmed visually via screenshot: "A+"'s label and tap target are entirely hidden behind the Back button, making it untappable at that scroll position.
+- **Root cause**: The two elements were laid out independently -- the scrollable toolbar row was never given any reserved space accounting for the always-on-top, fixed-position Back button occupying the exact corner the row scrolls into.
+- **Affected files**: `src/kb.js` (`.kr` CSS rule)
+- **Detection method**: Writing `tests/specs/android-mobile-ux.spec.js`'s zoom-button test, Playwright's `.tap()` auto-scrolled the "A+" button into view and then failed with `<button id="back-btn"> intercepts pointer events` -- i.e. the test discovered this by trying to actually interact with the button the way a user would, not by inspecting CSS. Confirmed with a screenshot at `kr.scrollLeft = kr.scrollWidth` showing "A+" fully hidden behind the circular Back button.
+- **Correction**: Added `padding-right:48px` to `.kr` (34px back-button width + 8px right offset + ~6px buffer), reserving enough scroll room that the last real button clears the back-button's footprint at maximum scroll. Re-verified via the same screenshot technique: "A+" now ends at x=361 while `#back-btn` starts at x=370, a clear 9px gap.
+- **Prevention rule**: Any fixed-position overlay UI element (like `#back-btn`) that shares a screen region with a *scrollable* container must have its footprint explicitly reserved as padding/margin in that container, not just visually checked at one scroll position. "The button doesn't overlap the content I can currently see" is not the same claim as "the button can never overlap the content," and only the latter is true safety for a scrollable list/row.
+
+### [2026-07-29-016] kb.js's modifier-key intercept didn't stop propagation, causing a double-send (control byte + literal key) to the PTY
+- **Timestamp**: 2026-07-29 06:20 UTC
+- **Summary**: Writing `tests/specs/android-mobile-ux.spec.js`'s test for the CTRL toolbar toggle button (tap CTRL, then press a letter key -- the only way a touch-only mobile user can send a control byte, since there's no physical Ctrl key to hold), the resulting PTY output showed BOTH the expected control-byte echo (`^C`) AND the literal, unmodified character typed right after it (e.g. tapping CTRL then pressing 'c' produced `^Cc`, then a second stray `c` began the next typed command -- garbling `echo mobile_ctrlc_ok` into `cecho mobile_ctrlc_ok`, which bash then failed to find as a command).
+- **Root cause**: kb.js's `document.addEventListener('keydown', ..., true)` intercept (used when CTRL/SHFT/ALT is toggled on via the toolbar) called `ev.preventDefault()` but never `ev.stopPropagation()`. `preventDefault()` only suppresses the browser's own default action (text insertion into the focused element) -- it does *not* stop the same event from continuing to bubble to other listeners. xterm.js's own keydown handler on its hidden textarea (bubble phase, which runs *after* this capture-phase listener) still received the identical keydown event and independently forwarded the raw, unmodified key to the PTY over its own path, producing a second, unwanted byte for every single intercepted keystroke.
+- **Affected files**: `src/kb.js` (the physical-keyboard-intercept-for-active-modifiers block)
+- **Detection method**: No existing test exercised this code path at all -- the one existing Ctrl+C test (`terminal-interaction.spec.js`) uses a real `Control+c` OS-level chord, which xterm.js's own native Ctrl-modifier detection handles directly and never reaches kb.js's toggle-button-driven intercept branch (`M.c` is only set true by tapping `#kb-c`). This bug was only reachable, and only found, by writing a test for the specific mobile interaction pattern (tap a toggle button, then press a key) that the manual verification checklist in `.claude/rules/tests.md` describes ("Tap CTRL (turns blue) → type a letter → confirm control byte intercepted") but had apparently never checked that *only* the control byte arrived.
+- **Correction**: Added `ev.stopPropagation()` immediately after `ev.preventDefault()` in the same intercept block, so once kb.js claims a keydown for an active modifier, no other listener (xterm.js's included) gets a chance to also act on it.
+- **Prevention rule**: A capture-phase event listener that claims ownership of an event to send a custom, transformed action (as opposed to just observing) must call `stopPropagation()`, not just `preventDefault()`, whenever the same DOM element tree has another listener (first-party or from a bundled library like xterm.js) that would otherwise also independently act on the untransformed event. A manual test-checklist step that only checks "the desired effect happened" (a control byte arrived) can still miss "and *only* the desired effect happened" (no extra byte also arrived) -- verify the complete output, not just that it contains what you expected.
+
+### [2026-07-29-015] Test helper's `waitForTerminalReady()` hardcoded a `canvas` selector, silently coupling the whole suite to one renderer
+- **Timestamp**: 2026-07-29 06:05 UTC
+- **Summary**: `tests/helpers/session-manager.js`'s `waitForTerminalReady()` used
+  `page.waitForSelector('.xterm-screen canvas', ...)`. The moment `TTYD_RENDERER_TYPE`'s default changed
+  from `canvas` to `dom` (see 2026-07-29-014 below), this selector would never resolve — the 'dom' renderer
+  never creates a `<canvas>` element — which would have broken all 35 existing Playwright tests (every one
+  of them calls this helper before interacting with a terminal), not just the mobile-DPR investigation that
+  surfaced the underlying renderer bug.
+- **Root cause**: A renderer-specific implementation detail (`<canvas>` existing at all) leaked into a
+  helper meant to answer a renderer-agnostic question ("has the terminal mounted?"). Nothing forced this
+  coupling — `.xterm-screen` (the container xterm.js always creates, regardless of webgl/canvas/dom) was
+  available and equally valid the whole time.
+- **Affected files**: `tests/helpers/session-manager.js`, plus stale explanatory comments in
+  `tests/README.md`, `tests/specs/terminal-interaction.spec.js`, `tests/helpers/ws-capture.js` that
+  asserted "xterm.js renders via WebGL/canvas" as if it were the only possibility.
+- **Detection method**: Ran the corrected renderer default through a probe script that reused the old
+  `canvas`-suffixed selector; it timed out even though the console line
+  `[ttyd] dom renderer loaded` had already printed, proving the app was fine and the selector was stale.
+  Grepped the whole `tests/` tree for `canvas` afterward instead of assuming the one selector was the only
+  reference.
+- **Correction**: Changed the selector to `.xterm-screen` (no `canvas` suffix). Re-ran the full 35-test
+  suite against the new `dom` default — 35/35 passed. Updated the stale comments to describe renderer
+  choice as configurable rather than fixed.
+- **Prevention rule**: Test helpers that wait for "the terminal is ready" must assert on markup that is
+  guaranteed to exist across every supported rendering mode, not on an implementation detail of whichever
+  renderer happened to be the default when the helper was written. After changing any config default with
+  multiple valid values (renderer type, feature flag, etc.), grep the whole test tree for the old value's
+  name, not just the one call site that prompted the change.
+
+### [2026-07-29-014] Canvas renderer (the previous "fix" for headless WebGL breakage) draws glyphs wrong at real mobile devicePixelRatio
+- **Timestamp**: 2026-07-29 05:55 UTC
+- **Summary**: Mistake 2026-07-29-012 fixed a headless-sandbox WebGL rendering bug by switching ttyd's
+  default renderer to `canvas`, verified only at desktop `devicePixelRatio=1`. Rigorously re-testing under
+  Playwright's `devices['Pixel 7']` profile (`devicePixelRatio=2.625` — an ordinary real phone, and this is
+  a mobile-first product) showed the canvas renderer drawing glyphs roughly DPR-times too large: only
+  ~20 characters visible across a 381px-wide terminal where 48+ should fit. The underlying tmux pane's
+  logical grid was computed reasonably (50 cols x 51 rows, close to desktop's 55x52) — the bug is in
+  xterm.js's canvas-renderer font-metric/scaling calculation at high DPR, not in NomadTTY's own CSS/layout
+  sizing, which stayed correct.
+- **Root cause**: The fix for -012 was verified in exactly one condition (headless sandbox, DPR=1) and
+  never re-tested at a real mobile DPR before being treated as settled — the same class of gap as -012
+  itself (trusting "no console errors" / "looks fine once" over actually looking at pixels in the
+  conditions that matter for a mobile-first app).
+- **Affected files**: `server/session-manager.js` (`spawnSession`)
+- **Detection method**: Direct side-by-side comparison of raw `ttyd --client-option rendererType=webgl` and
+  `rendererType=dom` processes against the identical Pixel 7 device profile: both computed a correctly
+  fine-grained tmux grid (122x129), unlike canvas's 50x51, and viewing the resulting screenshots confirmed
+  DOM renders crisp and correctly-sized while webgl reproduces the already-known headless breakage (-012).
+- **Correction**: Changed `spawnSession()`'s default `TTYD_RENDERER_TYPE` fallback from `canvas` to `dom` —
+  the only one of the three renderers verified correct in both failure conditions (headless/no-GPU sandbox
+  *and* real mobile DPR). Re-confirmed end-to-end through the real `spawnSession()` code path (not just the
+  raw-ttyd comparison) at both DPR=1 and DPR=2.625: nearly identical, correctly fine-grained tmux grids
+  (49x52 vs 49x51). See `docs/ai/decision-log.md` for the full renderer decision history.
+- **Prevention rule**: For a mobile-first product, any rendering fix must be verified at a real mobile
+  `devicePixelRatio` (e.g. via Playwright's `devices[...]` profiles), not just at desktop DPR=1, before
+  being considered resolved. A fix verified in only the one condition that prompted it is not verified.
+
 ### [2026-07-29-013] New MCP-tool HTTP tests repeated the "matched the input, not the output" bug
 - **Timestamp**: 2026-07-29 05:10 UTC
 - **Summary**: Writing `tests/specs/mcp-tools.spec.js`, several completion-polling predicates used

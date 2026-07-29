@@ -127,11 +127,21 @@
   };
 
   /* ── Physical keyboard intercept for active modifiers ── */
+  /* Capture-phase + stopPropagation: this must run and fully claim the
+     event BEFORE xterm.js's own bubble-phase keydown handler on its hidden
+     textarea sees it. preventDefault() alone only suppresses the browser's
+     default action (text insertion) -- it does NOT stop other listeners
+     from running, so without stopPropagation() xterm.js's own handler still
+     fires on the same event and independently forwards the raw, unmodified
+     key to the PTY, producing a double-send (e.g. CTRL+c would send both
+     the intercepted 0x03 byte AND a literal "c"). See docs/ai/mistakes.md
+     for the discovery of this. */
   document.addEventListener('keydown', function (ev) {
     if (!M.c && !M.s && !M.a) return;
     var k = ev.key;
     if (k === 'Shift' || k === 'Control' || k === 'Alt' || k === 'Meta') return;
     ev.preventDefault();
+    ev.stopPropagation();
     if (k.length === 1) {
       if (M.a) {
         send('\x1b' + (M.s ? k.toUpperCase() : k));
@@ -264,7 +274,12 @@
       'padding:3px;padding-top:calc(3px + env(safe-area-inset-top));',
       'box-shadow:0 2px 6px rgba(0,0,0,.7);}',
 
-    '.kr{display:flex;gap:2px;overflow-x:auto;',
+    /* padding-right reserves space so scrolling this row all the way to its
+       end doesn't leave the last button(s) sitting directly under the
+       fixed #back-btn circle (top-right corner, 34px wide + 8px offset) --
+       without it, swiping to the end of row1 puts "A+" completely behind
+       the Back button, making it untappable. See docs/ai/mistakes.md. */
+    '.kr{display:flex;gap:2px;overflow-x:auto;padding-right:48px;',
       '-webkit-overflow-scrolling:touch;scrollbar-width:none;}',
     '.kr::-webkit-scrollbar{display:none;}',
 

@@ -36,10 +36,19 @@ NomadTTY is a mobile-friendly web terminal, with two parallel deployment models 
   `#{pane_height}`. See mistakes.md [2026-07-29-008].
 - Any function that both dispatches an event and is registered as that same event's own
   listener needs an explicit re-entrancy guard. See mistakes.md [2026-07-29-011].
-- Session-manager-spawned ttyd processes render via canvas, not WebGL (`TTYD_RENDERER_TYPE`).
-  See mistakes.md [2026-07-29-012] and decision-log.md.
+- Session-manager-spawned ttyd processes render via DOM, not WebGL or canvas
+  (`TTYD_RENDERER_TYPE`) — canvas breaks at real mobile devicePixelRatio, webgl breaks
+  headless. See mistakes.md [2026-07-29-012], [2026-07-29-014] and decision-log.md.
 - Before calling a screenshot/rendering task "done," actually look at the resulting image —
   a clean console does not guarantee correct pixels. See mistakes.md [2026-07-29-012].
+- A capture-phase keydown listener that transforms/claims an event must call
+  `stopPropagation()`, not just `preventDefault()`, or a bundled library's own listener
+  (e.g. xterm.js's) can still independently act on the same untransformed event. See
+  mistakes.md [2026-07-29-016].
+- Any fixed-position overlay UI element sharing a screen region with a scrollable
+  container (e.g. `#back-btn` over `#kb`'s toolbar row) must have its footprint reserved
+  as padding/margin in that container, not just checked at one scroll position. See
+  mistakes.md [2026-07-29-017].
 
 ## Key files
 | File | Role |

@@ -85,16 +85,22 @@ function spawnSession(label) {
     '--interface', '127.0.0.1',
     '--writable',
     '--base-path', basePath,
-    /* ttyd's default xterm.js renderer is WebGL. Under headless/software-GPU
-       environments (CI, automated screenshot capture, some low-end/virtualized
-       browsers) that renderer can paint incorrectly -- glyphs at the wrong
-       scale, mostly-blank viewport -- even though the underlying tmux pane
-       and DOM/canvas sizing are correct (verified while capturing the
-       Session Manager's own documentation screenshots). The 2D canvas
-       renderer is xterm.js's long-standing, broadly-compatible default and
-       renders correctly in every environment tested; override via
-       TTYD_RENDERER_TYPE if a deployment specifically wants webgl/dom. */
-    '--client-option', 'rendererType=' + (process.env.TTYD_RENDERER_TYPE || 'canvas'),
+    /* ttyd's default xterm.js renderer is WebGL, which paints incorrectly
+       under headless/software-GPU environments (CI, automated screenshot
+       capture, some low-end/virtualized browsers) -- mostly-blank viewport,
+       even though the underlying tmux pane and DOM sizing are correct.
+       The 'canvas' renderer was tried as a fix but has its own defect: at
+       devicePixelRatio > 1 (i.e. every real phone/tablet -- this is a
+       mobile-first product) it draws glyphs roughly DPR-times too large
+       while the logical column/row count stays correct, making the
+       terminal look broken specifically on real mobile hardware despite
+       working on a DPR-1 desktop dev/test viewport. 'dom' (xterm.js's
+       original, long-standing renderer) is the only one of the three
+       verified correct in BOTH failure conditions: headless/no-GPU *and*
+       high DPR. See docs/ai/decision-log.md and docs/ai/mistakes.md
+       2026-07-29-014/015. Override via TTYD_RENDERER_TYPE if a deployment
+       has a specific reason to want canvas/webgl instead. */
+    '--client-option', 'rendererType=' + (process.env.TTYD_RENDERER_TYPE || 'dom'),
     'tmux', 'new-session', '-A', '-s', id,
   ], { stdio: ['ignore', 'pipe', 'pipe'] });
 

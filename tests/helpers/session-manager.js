@@ -45,14 +45,16 @@ async function createSessionViaUi(page) {
 }
 
 /**
- * The terminal canvas mounts asynchronously (ttyd's JS bundle loads, opens
- * the WebSocket, then xterm.js attaches its canvas). Wait for the actual
- * rendering artifact rather than a fixed delay: the canvas element itself,
- * plus the WS hook (`window._S`, injected by the app's existing sub_filter
- * equivalent) reaching OPEN state.
+ * The terminal screen mounts asynchronously (ttyd's JS bundle loads, opens
+ * the WebSocket, then xterm.js attaches its renderer). Wait for the actual
+ * rendering artifact rather than a fixed delay: `.xterm-screen` itself is
+ * renderer-agnostic (present under webgl/canvas/dom alike, unlike a `canvas`
+ * element which the 'dom' renderer never creates -- see docs/ai/decision-log.md's
+ * ttyd renderer entry), plus the WS hook (`window._S`, injected by the app's
+ * existing sub_filter equivalent) reaching OPEN state.
  */
 async function waitForTerminalReady(page) {
-  await page.waitForSelector('.xterm-screen canvas', { state: 'visible', timeout: 15000 });
+  await page.waitForSelector('.xterm-screen', { state: 'visible', timeout: 15000 });
   await page.waitForFunction(() => window._S && window._S.readyState === 1, null, { timeout: 15000 });
 }
 

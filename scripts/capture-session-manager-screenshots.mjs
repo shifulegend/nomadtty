@@ -30,7 +30,7 @@ const CHROMIUM_PATH = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 mkdirSync(ASSETS, { recursive: true });
 
 async function waitForTerminalReady(page) {
-  await page.waitForSelector('.xterm-screen canvas', { state: 'visible', timeout: 15000 });
+  await page.waitForSelector('.xterm-screen', { state: 'visible', timeout: 15000 });
   await page.waitForFunction(() => window._S && window._S.readyState === 1, null, { timeout: 15000 });
 }
 

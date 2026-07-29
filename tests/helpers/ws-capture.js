@@ -1,27 +1,29 @@
 'use strict';
 
 /*
- * Why this exists (read before "fixing" a flaky canvas assertion):
+ * Why this exists (read before "fixing" a flaky rendering-based assertion):
  *
- * The terminal view is xterm.js running inside ttyd, rendered with the
- * WebGL/canvas renderer. That means keystrokes and their echoed output
- * exist only as pixels on a <canvas> — there is no DOM text node to query
- * with waitForSelector/textContent, and ttyd's renderer mode is chosen by
- * a server-side CLI flag (not a URL param), so a test cannot switch it to
- * the DOM renderer without editing application source, which is out of
- * scope for this suite.
+ * The terminal view is xterm.js running inside ttyd. Its renderer mode
+ * (webgl/canvas/dom, see server/session-manager.js's TTYD_RENDERER_TYPE) is
+ * chosen by a server-side CLI flag, not a URL param, so a test cannot
+ * switch it per-run. Under webgl/canvas, keystrokes and echoed output exist
+ * only as pixels — there is no DOM text node to query with
+ * waitForSelector/textContent at all. The 'dom' renderer (the default per
+ * docs/ai/decision-log.md's ttyd renderer entry) does produce real text nodes, but asserting
+ * on the WS stream stays strictly more reliable than either: it doesn't
+ * depend on rendering having completed or on renderer choice at all, so
+ * this suite keeps using it uniformly rather than branching per renderer.
  *
- * The reliable, non-flaky alternative: every byte the terminal displays
- * arrives over the same `/term/<id>/ws` WebSocket the browser already
- * holds, using ttyd's tiny framing protocol (1-byte command prefix):
+ * The mechanism: every byte the terminal displays arrives over the same
+ * `/term/<id>/ws` WebSocket the browser already holds, using ttyd's tiny
+ * framing protocol (1-byte command prefix):
  *   server -> client: "0" + output bytes, "1" + title, "2" + preferences
  *   client -> server: "0" + input bytes, "1" + resize JSON
  * Playwright exposes raw frames via `page.on('websocket', ...)`, so we
- * decode the "0" (output) and "1" (resize) frames directly. This asserts
- * on the actual PTY stream — strictly more reliable than pixel/OCR
- * inspection of a canvas, and it still requires the canvas to have
- * mounted and the socket to be open, so callers should pair it with
- * `waitForTerminalReady()` below rather than replacing that check.
+ * decode the "0" (output) and "1" (resize) frames directly. This still
+ * requires the terminal to have mounted and the socket to be open, so
+ * callers should pair it with `waitForTerminalReady()` rather than
+ * replacing that check.
  */
 
 const OUTPUT_CMD = '0'.charCodeAt(0);

@@ -17,6 +17,45 @@
 
 ---
 
+### [2026-07-29] Rigorous mobile UX validation via Playwright device emulation; two real mobile bugs found and fixed
+- **Timestamp**: 2026-07-29 06:40 UTC
+- **Change**:
+  - `server/session-manager.js`: default `TTYD_RENDERER_TYPE` changed from `canvas` to `dom` — the canvas
+    renderer was found to draw glyphs at the wrong size specifically at real mobile `devicePixelRatio`
+    values (e.g. Pixel 7's 2.625), a regression from the earlier webgl→canvas fix that had only been
+    verified at desktop DPR=1.
+  - `tests/helpers/session-manager.js`: `waitForTerminalReady()`'s selector changed from
+    `.xterm-screen canvas` to `.xterm-screen` (renderer-agnostic — the `dom` renderer creates no
+    `<canvas>` element). Stale "renders via WebGL/canvas" comments updated in `tests/README.md`,
+    `tests/specs/terminal-interaction.spec.js`, `tests/helpers/ws-capture.js`.
+  - `src/kb.js`: added `ev.stopPropagation()` to the CTRL/SHFT/ALT modifier-key intercept, fixing a
+    double-send bug (the intercepted control byte AND the raw unmodified key both reached the PTY).
+    Added `padding-right:48px` to `.kr` (the scrollable toolbar row) so scrolling it fully right no
+    longer places the "A+" button directly under the fixed `#back-btn` circle, which fully covered and
+    blocked it.
+  - Added `tests/specs/android-mobile-ux.spec.js` — 4 new tests using Playwright's `devices['Pixel 7']`
+    emulation: mobile Session Manager layout, Join→terminal-ready with a Back-button/terminal-canvas
+    overlap geometry assertion, full Join→type→tap-Back→re-Join scrollback-preservation navigation, and
+    the mobile-specific toolbar interactions (CTRL-toggle + key, Fn row, zoom) — the latter two tests are
+    what caught the kb.js bugs above.
+  - Documented all of the above in `docs/ai/mistakes.md` (2026-07-29-014 through -017) and
+    `docs/ai/decision-log.md` (dom-renderer decision, Playwright-emulation-over-AVD decision).
+- **Rationale**: Asked to rigorously validate mobile rendering/UX using device simulation. An Android AVD
+  was ruled out (no `/dev/kvm`, no hardware virtualization in this environment — see decision-log) in
+  favor of Playwright's device emulation, which still exercises the real variables that matter (viewport,
+  DPR, touch) without the crash-prone software-emulation fallback the task's constraint explicitly warned
+  against. Writing tests for the *specific* mobile interaction patterns (tap-to-toggle-then-type, swipe a
+  scrollable toolbar to its end) — rather than just taking a screenshot and eyeballing it — is what
+  surfaced both new kb.js bugs; neither is reachable through the existing desktop-DPR=1 suite's assertions.
+- **Affected areas**: `server/session-manager.js`, `src/kb.js`, `tests/helpers/session-manager.js`,
+  `tests/helpers/ws-capture.js`, `tests/specs/terminal-interaction.spec.js`, `tests/README.md`,
+  `tests/specs/android-mobile-ux.spec.js` (new), `.claude/rules/tests.md`, `docs/ai/mistakes.md`,
+  `docs/ai/decision-log.md`
+- **Related commit**: "test: implement rigorous android simulator testing and capture mobile screenshots"
+- **Related decisions**: 2026-07-29 "Session Manager's ttyd processes default to the dom renderer",
+  2026-07-29 "Mobile UX validation uses Playwright device emulation, not a full Android emulator (AVD)"
+- **Related mistakes**: 2026-07-29-014, 2026-07-29-015, 2026-07-29-016, 2026-07-29-017
+
 ### [2026-07-29] Automated test coverage for all 7 MCP tools; strengthened the "last joined" assertion
 - **Timestamp**: 2026-07-29 05:15 UTC
 - **Change**:

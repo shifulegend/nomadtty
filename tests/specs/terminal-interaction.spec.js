@@ -3,11 +3,12 @@
 /*
  * Interactive terminal behaviour: typing into the terminal and asserting
  * on the PTY's stdout. See helpers/ws-capture.js for why these assertions
- * read the ttyd WebSocket stream instead of the canvas DOM — xterm.js
- * renders via WebGL/canvas here, so there is no text node to query, and
- * ttyd's renderer mode is a server-side flag, not something a test-only
- * change can flip. waitForTerminalReady() still uses waitForSelector to
- * confirm the canvas has actually mounted before any interaction.
+ * read the ttyd WebSocket stream instead of querying rendered DOM/canvas
+ * output directly — that stays correct regardless of which xterm.js
+ * renderer is active (webgl/canvas/dom, a server-side flag, not something
+ * a test-only change can flip). waitForTerminalReady() still uses
+ * waitForSelector to confirm `.xterm-screen` has actually mounted before
+ * any interaction.
  */
 
 const { test, expect } = require('@playwright/test');

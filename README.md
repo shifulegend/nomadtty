@@ -277,7 +277,7 @@ Creating a session runs, in order:
   1. tmux new-session -d -s <id>                         (created eagerly — MCP tools work
                                                             immediately, no browser required)
   2. ttyd --port <p> --interface 127.0.0.1 --writable \
-          --client-option rendererType=canvas \
+          --client-option rendererType=dom \
           --base-path /term/<id>/ tmux new-session -A -s <id>   (attaches to the session from step 1)
 ```
 
@@ -306,6 +306,64 @@ in the same monospace/dark design language as the toolbar (see `DESIGN.md`):
 | Session Manager list (mobile) | Terminal view + Back button (mobile) |
 |---|---|
 | ![Session Manager list on a mobile viewport, showing two running sessions with Join/Close buttons](docs/assets/screenshot-session-manager-mobile.png) | ![Terminal view on a mobile viewport with the circular Back button visible in the top-right corner, overlaid on live terminal output](docs/assets/screenshot-back-button-mobile.png) |
+
+### Rigorous mobile UX validation
+
+Mobile rendering and UX is validated against a real Android device profile —
+Playwright's `devices['Pixel 7']` emulation (real 412×915 viewport,
+`devicePixelRatio=2.625`, touch input, mobile user-agent) — rather than a full
+Android emulator (AVD). A real AVD was evaluated and rejected for this
+environment: there's no `/dev/kvm` and no hardware-virtualization CPU flags
+available, so an AVD would fall back to slow, software-emulated QEMU — the
+exact "heavy GUI overhead that crashes headless CI environments" failure mode
+to avoid. Playwright's device emulation reproduces every variable that
+actually matters for this project's mobile rendering (viewport, DPR, touch)
+on the same headless Chromium the rest of the suite already uses. See
+`docs/ai/decision-log.md` for the full write-up.
+
+`tests/specs/android-mobile-ux.spec.js` (4 tests, run via `npx playwright
+test specs/android-mobile-ux.spec.js`) exercises:
+
+- The Session Manager's mobile layout.
+- Full navigation: **Join** a session → type a command → tap the **Back**
+  button (a real touch tap, not a mouse click) → confirm the session is still
+  listed with an updated last-joined time → **Join** again → confirm the
+  earlier output is still there (tmux scrollback survived the round trip).
+- **A geometry assertion that the Back button never covers live terminal
+  text** — it measures the actual pixel overlap between `#back-btn` and
+  `.xterm-screen` and fails if it exceeds a sliver at the very top-right
+  corner (well under one character row's height).
+  Confirmed visually below: the Back button sits in its own space above and
+  to the right of the prompt, never over any rendered character.
+- Mobile-specific toolbar interactions: the CTRL/SHFT/ALT sticky-modifier
+  buttons combined with a physical key press, the Fn row expanding to show
+  F1–F12, and the zoom (A−/A+) buttons.
+
+| Terminal + Back button, live output (Pixel 7) | Fn row expanded (Pixel 7) |
+|---|---|
+| ![Terminal view on a Pixel 7 profile with crisp, correctly-sized text and the Back button floating clear of the live output](docs/assets/screenshot-android-terminal-back-button.png) | ![Toolbar with the Fn button active (blue) and the F1-F10 row expanded below it](docs/assets/screenshot-android-toolbar-fn-expanded.png) |
+
+Writing tests for these specific mobile interaction patterns — not just
+taking a screenshot and eyeballing it — surfaced three real, previously
+undiscovered bugs, all now fixed:
+
+1. **The canvas xterm.js renderer drew glyphs at the wrong size at real
+   mobile DPR** (only ~20 characters visible where 48+ should fit). Default
+   renderer changed to `dom`, the only one of the three verified correct both
+   headless and at real mobile DPR. See `docs/ai/mistakes.md` 2026-07-29-014.
+2. **The CTRL/SHFT/ALT toolbar buttons double-sent keystrokes**: tapping
+   CTRL then pressing a key sent both the intercepted control byte *and* the
+   raw, unmodified character, because the intercept never called
+   `stopPropagation()`. Fixed in `src/kb.js`. See mistakes.md 2026-07-29-016.
+3. **The floating Back button could fully cover the toolbar's own "A+"
+   button** when the toolbar row was scrolled all the way right — an
+   ordinary swipe gesture. Fixed by reserving scroll padding in `src/kb.js`
+   so the row can't scroll far enough to tuck a button under the Back
+   button. See mistakes.md 2026-07-29-017.
+
+| Toolbar scrolled to the end — before the fix | Toolbar scrolled to the end — after the fix |
+|---|---|
+| ![Toolbar scrolled fully right with the circular Back button completely covering the A+ button, making it untappable](docs/assets/toolbar-overlap-bug-before-fix.png) | ![Toolbar scrolled fully right with the A+ button fully visible and clear of the Back button](docs/assets/screenshot-android-toolbar-scrolled.png) |
 
 ### Quick start
 

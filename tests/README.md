@@ -36,16 +36,17 @@ manual server startup is needed.
   a session through real clicks) and small API helpers used only for test
   setup/teardown and cross-checking backend state.
 - `helpers/ws-capture.js` — see the comment at the top of that file. Short
-  version: the terminal renders through xterm.js's WebGL/canvas renderer, so
-  there's no DOM text node holding "what the terminal displays," and the
-  renderer mode is a server-side ttyd flag rather than something a test can
-  toggle. Assertions on terminal *output* instead decode the same
-  `/term/<id>/ws` WebSocket frames the browser already receives (ttyd's
-  1-byte-prefixed protocol), which is deterministic and avoids canvas/OCR
-  flakiness entirely. Canvas *mounting* is still awaited with a real
-  `waitForSelector` (`waitForTerminalReady` in `helpers/session-manager.js`)
-  before any interaction — this only replaces "how do we read what's on
-  screen," not "how do we know the screen exists yet."
+  version: xterm.js's renderer mode (webgl/canvas/dom — a server-side ttyd
+  flag, see `TTYD_RENDERER_TYPE` in `server/session-manager.js`, not
+  something a test can toggle) determines whether "what the terminal
+  displays" even exists as a DOM text node. Assertions on terminal *output*
+  instead decode the same `/term/<id>/ws` WebSocket frames the browser
+  already receives (ttyd's 1-byte-prefixed protocol), which is
+  deterministic and correct regardless of renderer choice. Terminal
+  *mounting* is still awaited with a real `waitForSelector('.xterm-screen')`
+  (`waitForTerminalReady` in `helpers/session-manager.js`) before any
+  interaction — this only replaces "how do we read what's on screen," not
+  "how do we know the screen exists yet."
   Use **`waitForOutputLine(line)`** (not raw substring counting) whenever a
   test needs to prove a command actually *ran*, not just that it was typed —
   it matches `line` only as a complete line on its own, which is immune to a
@@ -77,6 +78,19 @@ manual server startup is needed.
   streaming), `scroll_buffer`, `type_command`, `send_keystroke` (named +
   hex, including a real Ctrl+C interrupt), `get_process_status`, and
   `list_active_ports` — plus validation-error paths for each.
+- `specs/android-mobile-ux.spec.js` — mobile rendering/UX validated via
+  Playwright's `devices['Pixel 7']` emulation (real viewport, `devicePixelRatio`,
+  touch, mobile user-agent — see `docs/ai/decision-log.md` for why this is used
+  instead of a full Android emulator/AVD): the Session Manager's mobile layout,
+  full navigation (Join → interact → tap Back → re-Join with scrollback intact),
+  a Back-button/terminal-canvas overlap geometry assertion, and the toolbar's
+  touch-specific interactions (CTRL modifier + physical key, Fn row toggle, zoom).
+  This file exists to catch defects invisible at desktop `devicePixelRatio=1` —
+  it directly caught the renderer bug in `docs/ai/mistakes.md` 2026-07-29-014
+  (which prompted writing it), and, once written, also caught two further
+  real bugs neither of the other suites could have reached: 2026-07-29-016
+  (a modifier-key double-send) and 2026-07-29-017 (the Back button covering the
+  toolbar's own "A+" button at full scroll).
 
 ## Test isolation
 

@@ -15,6 +15,67 @@
 
 ---
 
+### [2026-07-29] Mobile UX validation uses Playwright device emulation, not a full Android emulator (AVD)
+- **Context**: Asked to "download and configure an agent-friendly Android simulator" for rigorous mobile
+  rendering/UX validation, with an explicit constraint that setup must not introduce heavy GUI overhead
+  that crashes headless CI environments.
+- **Decision**: Use Playwright's built-in device emulation (`devices['Pixel 7']`, etc.) — real mobile
+  viewport dimensions, `deviceScaleFactor` (devicePixelRatio), `hasTouch`, `isMobile`, and user-agent
+  metadata applied to the same headless Chromium already used by this suite — instead of a real Android
+  Virtual Device (AVD) via the Android SDK emulator.
+- **Alternatives considered**: A full AVD (e.g. via `android-emulator-runner` or a manually configured
+  Android SDK emulator). Checked directly rather than assumed: `/dev/kvm` does not exist in this
+  environment, no VMX/SVM hardware-virtualization CPU flags are exposed, and no Android SDK tooling is
+  pre-installed. Without KVM/HVF acceleration, the AVD falls back to QEMU's software TCG emulation, which
+  is exactly the slow/crash-prone failure mode GitHub's own `android-emulator-runner` documentation warns
+  against on standard (non-`macos`/non-nested-virt) runners — i.e. precisely the "heavy GUI overhead that
+  crashes headless CI environments" this task's constraint rules out.
+  Real hardware/device farm access was also considered and rejected: no such MCP connector or tool is
+  available in this environment.
+- **Rationale**: Playwright device emulation reproduces every mobile-rendering variable this task actually
+  needed to validate — real touch-target geometry, real DPR (the exact axis on which the canvas-renderer
+  bug in 2026-07-29-014 was found — an AVD would not have caught this any more definitively), and real
+  mobile viewport dimensions — without booting a second, heavyweight virtualized OS. It is also already
+  this project's own established convention (prior documentation screenshot scripts already used Android
+  device profiles), so this is a continuation of an existing pattern, not a new one.
+- **Consequences**: This does not validate Android-OS-specific or Chrome-for-Android-specific browser
+  engine quirks (a real AVD or device farm would be needed for that). For a web app with no
+  platform-specific native code, this is an accepted, documented trade-off — flagged here explicitly should
+  a future defect ever appear that only reproduces on real Android Chrome.
+- **Owner**: claude (session rigorously validating mobile rendering/UX via device simulation)
+
+### [2026-07-29] Session Manager's ttyd processes default to the dom renderer (supersedes the canvas decision below)
+- **Context**: The entry directly below this one records switching the default ttyd renderer from `webgl`
+  to `canvas` to fix a headless-sandbox rendering bug, verified only at desktop `devicePixelRatio=1`.
+  Rigorously re-testing mobile rendering via Playwright's `devices['Pixel 7']` profile
+  (`devicePixelRatio=2.625`) surfaced a second, more serious defect in that "fix": the canvas renderer
+  draws terminal glyphs roughly DPR-times too large, so only ~20 characters were visible across a
+  381px-wide terminal where 48+ should fit — a regression specifically on real mobile hardware, the
+  primary target of a mobile-first product. See `docs/ai/mistakes.md` 2026-07-29-014 for full evidence.
+- **Decision**: `spawnSession()` in `server/session-manager.js` now passes `--client-option
+  rendererType=dom` by default (still overridable via `TTYD_RENDERER_TYPE`), replacing `canvas`.
+- **Alternatives considered**: Re-litigating `webgl` (rejected — reproduces the original -012 headless
+  breakage, confirmed by direct side-by-side comparison against `dom` on the identical Pixel 7 profile);
+  keeping `canvas` for desktop and special-casing mobile (rejected — same reasoning as the canvas-vs-webgl
+  decision below: deploying a different configuration than the one being tested/documented is itself a
+  risk, and there is no reliable server-side signal to distinguish "desktop browser" from "mobile browser"
+  at ttyd process spawn time, before any client has connected).
+- **Rationale**: `dom` is the only one of the three xterm.js renderers verified correct in *both* failure
+  conditions found so far: headless/no-GPU sandboxes (where `webgl` breaks) and real mobile DPR (where
+  `canvas` breaks). It is xterm.js's original, long-standing renderer, not experimental. Re-verified
+  end-to-end through the real `spawnSession()` code path at DPR=1 and DPR=2.625: both produced correctly
+  fine-grained, nearly-identical tmux grids (49x52 vs 49x51), and the full existing 35-test Playwright
+  suite passed unchanged against the new default.
+- **Consequences**: Every session-manager-spawned ttyd process now renders via DOM by default. This has no
+  known downside for this project's use case (a handful of terminal characters per screen, not a
+  high-frequency scrollback-heavy workload) and is consistent with AGENTS.md's Terminal Emulator
+  Performance Constraint. Test helper `waitForTerminalReady()` had to change its selector from
+  `.xterm-screen canvas` to `.xterm-screen`, since `dom` creates no `<canvas>` element — see
+  `docs/ai/mistakes.md` 2026-07-29-015. Deployments that specifically want canvas/webgl (e.g. a
+  high-throughput scrollback use case validated on desktop-only clients) can still set
+  `TTYD_RENDERER_TYPE=canvas` or `=webgl` explicitly.
+- **Owner**: claude (session rigorously validating mobile rendering/UX via device simulation)
+
 ### [2026-07-29] Session Manager's ttyd processes default to the canvas renderer, not WebGL
 - **Context**: Capturing documentation screenshots of `/term/<id>/` in a headless browser showed a mostly
   blank terminal with a few huge, sparse glyphs, despite correct DOM/CSS sizing and a sane tmux pane
