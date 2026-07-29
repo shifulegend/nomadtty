@@ -17,6 +17,14 @@
 
 ---
 
+### [2026-07-29] Fixed ttyd-startup race in the reverse proxy (Upstream error on new sessions)
+- **Timestamp**: 2026-07-29 15:35-15:45 UTC
+- **Change**: Added a bounded retry-with-delay (`UPSTREAM_RETRY_MAX=20`, `UPSTREAM_RETRY_DELAY_MS=100`) in `server/session-manager.js`'s `proxyHttp()`, scoped to `GET` requests failing with `ECONNREFUSED`. Restarted the live `nomadtty.service` to deploy it.
+- **Rationale**: See `docs/ai/mistakes.md` [2026-07-29-023] -- the post-cutover Playwright re-run showed 21-23/55 tests failing consistently across independent runs, 100% correlated with tests that create a session via the real UI click path rather than the raw API, and reproducible in complete isolation (ruling out cumulative load). Root cause: the client navigates to `/term/<id>/` before confirming ttyd has finished starting.
+- **Affected areas**: `server/session-manager.js`, `docs/ai/mistakes.md`
+- **Verification**: The previously 100%-reproducible isolated test (`android-mobile-stress.spec.js:54`) now passes. A manual Playwright script driving the exact same UI click path (`#new-session-btn` → wait for `.xterm-screen` → wait for WS `readyState===1`) against the live `terminal.pz.net` produced a working terminal with a real shell prompt and zero console errors, confirmed visually via screenshot. Full 55-test suite re-run in progress to confirm the fix resolves the entire failure set, not just the one isolated case.
+- **Related mistakes**: `docs/ai/mistakes.md` [2026-07-29-023]
+
 ### [2026-07-29] Merged all pending branches into main; cut terminal.pz.net over to Session Manager + MCP
 - **Timestamp**: 2026-07-29 14:00-15:00 UTC
 - **Change**: Merged `feature/agentic-mcp-overhaul` and `claude/nomadtty-playwright-tests-b2q3wo`
