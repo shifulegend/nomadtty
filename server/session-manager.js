@@ -224,8 +224,26 @@ function injectToolbar(html, label, pageUrl) {
     .replace('<head>', '<head>' + inject);
 }
 
-/* ── Reverse proxy: HTTP ── */
-function proxyHttp(req, res, port, label, onDone) {
+/* ── Reverse proxy: HTTP ──
+ * spawnSession() returns as soon as ttyd has been spawn()'d, not once it has
+ * actually finished binding its port (see spawnSession's own comment on why
+ * session creation stays synchronous only up to the tmux session, not
+ * ttyd's readiness) -- and public/session-manager.js deliberately navigates
+ * the browser to /term/<id>/ the instant it has an id, without waiting for
+ * any "ready" signal (its own comment: "async-only, never block the UI
+ * thread"). That leaves a brief window where this proxy's first request for
+ * a brand-new session can reach ttyd's port before ttyd is listening on it
+ * -- ECONNREFUSED. A short retry-with-delay absorbs exactly that startup
+ * race (and any other transient refusal) without making session creation
+ * itself block on ttyd's startup, which would violate the client's own
+ * design principle above. Bounded to GET only: a request with a body has
+ * already had that body piped into the first attempt's upstream socket, so
+ * it cannot be safely retried. */
+const UPSTREAM_RETRY_MAX = 20;
+const UPSTREAM_RETRY_DELAY_MS = 100;
+
+function proxyHttp(req, res, port, label, onDone, attempt) {
+  attempt = attempt || 0;
   const upstream = http.request({
     host: '127.0.0.1', port,
     path: req.url, method: req.method,
@@ -251,7 +269,13 @@ function proxyHttp(req, res, port, label, onDone) {
       upRes.on('end', () => { if (onDone) onDone(); });
     }
   });
-  upstream.on('error', () => { res.writeHead(502); res.end('Upstream error'); });
+  upstream.on('error', (err) => {
+    if (err.code === 'ECONNREFUSED' && req.method === 'GET' && attempt < UPSTREAM_RETRY_MAX) {
+      setTimeout(() => proxyHttp(req, res, port, label, onDone, attempt + 1), UPSTREAM_RETRY_DELAY_MS);
+      return;
+    }
+    res.writeHead(502); res.end('Upstream error');
+  });
   req.pipe(upstream);
 }
 
