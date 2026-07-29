@@ -402,6 +402,12 @@ scenarios, each pairing a keyboard open/close reflow with a distinct concurrent 
    Session Manager itself still renders usably in a reduced/transitioning viewport, and
    the stream (running server-side regardless of the browser tab) completed cleanly.
 
+Headless Chromium has no real on-screen virtual keyboard/IME to render, so each
+screenshot below draws a clearly-labeled illustrative keyboard mockup in the space
+the terminal correctly leaves empty — the *space itself* (and the terminal's correct
+reflow into what's left) is the real, tested behavior; the key graphic is just there
+so the space reads as "a keyboard is open here" at a glance.
+
 | 1. Rapid open/close cycles | 2. Typing mid-transition | 3. Keyboard + Fn row |
 |---|---|---|
 | ![Streaming text rendering cleanly after 4 rapid keyboard open/close cycles](docs/assets/screenshot-keyboard-toggle-1-rapid-cycles.png) | ![Typed command text visibly interleaved with concurrent stream output as both write to the terminal at once -- expected concurrent-write behavior, not corruption](docs/assets/screenshot-keyboard-toggle-2-typing-mid-transition.png) | ![Fn row expanded and the terminal reflowed to the shorter keyboard-open height at the same time, both rendering correctly](docs/assets/screenshot-keyboard-toggle-3-keyboard-plus-fn.png) |
