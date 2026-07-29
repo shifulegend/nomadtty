@@ -247,7 +247,65 @@ dependencies, no build step, and no bundler.
 > **Note:** this is a separate, newer Node.js backend (`server/**`) alongside the
 > nginx/ttyd setup above. It supports multiple concurrent named terminal sessions and
 > exposes them to AI agents over MCP. It is not yet wired into `Dockerfile`/`install.sh`
-> — run it directly with Node.
+> — run it directly with Node. (This is a known, tracked gap — see
+> `docs/ai/project-overview.md`'s current-state note — not an oversight in this doc.)
+
+This backend is governed by the same [`AGENTS.md`](AGENTS.md) constraints as the rest
+of the repo. Two are worth calling out explicitly here since it's easy to assume
+otherwise once an MCP server is LAN-reachable: **every ttyd process the Session
+Manager spawns still listens on `127.0.0.1` only and still runs with `--writable`** —
+exactly like the legacy nginx model above. Nothing about adding MCP support changes
+that. What *is* new is a second, separate listener (the MCP server) that is
+LAN-facing by default and gated by its own bearer-token authentication — see
+[Security model](#security-model) below.
+
+### Architecture
+
+```
+                node server/main.js  (one process, two listeners)
+                ├── Session Manager   127.0.0.1:4000   (UI/API, no auth — loopback only)
+                │     ├─ GET  /                        Session Manager UI (screenshot below)
+                │     ├─ */api/sessions[/:id]           create / list / close
+                │     ├─ GET  /kb.js                    mobile toolbar (shared with the legacy model)
+                │     └─ *    /term/:id/*               reverse proxy → that session's ttyd (HTTP+WS)
+                │
+                └── MCP server        0.0.0.0:4200      (Streamable HTTP, bearer-token auth REQUIRED)
+                      └─ POST/GET/DELETE /mcp           JSON-RPC + SSE, 7 terminal-control tools
+
+Both share ONE in-memory session registry directly (same process, no network hop).
+Creating a session runs, in order:
+  1. tmux new-session -d -s <id>                         (created eagerly — MCP tools work
+                                                            immediately, no browser required)
+  2. ttyd --port <p> --interface 127.0.0.1 --writable \
+          --client-option rendererType=canvas \
+          --base-path /term/<id>/ tmux new-session -A -s <id>   (attaches to the session from step 1)
+```
+
+MCP tools act on the tmux session directly (`tmux capture-pane` / `send-keys` /
+`display-message`) — independent of ttyd's WebSocket — so an agent can drive a
+terminal with no human ever opening a browser tab.
+
+### Session Manager features
+
+The Session Manager UI is a small, dependency-free page (`public/session-manager.*`)
+in the same monospace/dark design language as the toolbar (see `DESIGN.md`):
+
+- **Multiple concurrent named sessions.** Create as many terminals as you want, each
+  with its own label; they all keep running in the background.
+- **True persistence.** Closing a browser tab (or navigating back to the list) does
+  *not* end the session — only the explicit **Close** button does. Under the hood
+  that's tmux: the shell and its scrollback live in the tmux session, not the
+  browser tab, so re-**Join**ing reattaches to the exact same state.
+- **Live status.** The list polls `/api/sessions` every 5s and shows each session's
+  status and last-joined time, with no manual refresh needed.
+- **A Back button overlaid on the terminal itself** (`#back-btn`, injected by
+  `src/kb.js`), so leaving a session to go create or join another one is a single
+  tap — it never touches `#terminal-container`'s layout or fires a spurious resize
+  (see `DESIGN.md`).
+
+| Session Manager list (mobile) | Terminal view + Back button (mobile) |
+|---|---|
+| ![Session Manager list on a mobile viewport, showing two running sessions with Join/Close buttons](docs/assets/screenshot-session-manager-mobile.png) | ![Terminal view on a mobile viewport with the circular Back button visible in the top-right corner, overlaid on live terminal output](docs/assets/screenshot-back-button-mobile.png) |
 
 ### Quick start
 
@@ -266,23 +324,8 @@ This starts two listeners in one process:
 The MCP server refuses to start bound to a non-loopback address without
 `MCP_AUTH_TOKEN` set (set `MCP_ALLOW_INSECURE=1` to explicitly override for local
 testing — never in production). See `.claude/rules/config.md` for the full list of
-`MCP_*` / `SESSION_MANAGER_*` / `TTYD_BASE_PORT` environment variables.
-
-### MCP tools
-
-| Tool | Purpose |
-|---|---|
-| `get_screenshot` | Textual/ANSI snapshot of a terminal's current viewport (see note below on why this is text, not pixels) |
-| `scroll_buffer` | Scroll a terminal's view up/down by lines or pages; position persists per terminal |
-| `type_command` | Inject literal text into a terminal's stdin, optionally submitting with Enter |
-| `send_keystroke` | Send named key combinations (`C-c`, `M-F4`, `Enter`, …) or raw hex-encoded bytes |
-| `read_terminal_contents` | Read the buffer as `full` / `head` / `tail`; `follow=true` streams new output live over SSE |
-| `get_process_status` | Process tree (PID, CPU%, mem%, state) for everything running in a terminal's shell |
-| `list_active_ports` | Host-wide TCP/UDP listening sockets — check a dev server actually started |
-
-NomadTTY's terminals are text-mode (ttyd/tmux), so `get_screenshot` returns an
-ANSI/text capture rather than a pixel image — there's no server-side pixel renderer in
-this architecture (see `docs/ai/decision-log.md`).
+`MCP_*` / `SESSION_MANAGER_*` / `TTYD_BASE_PORT` / `TTYD_RENDERER_TYPE` environment
+variables.
 
 ### Connecting an MCP client
 
@@ -296,15 +339,250 @@ curl -X POST http://<host>:4200/mcp \
 
 The response includes an `Mcp-Session-Id` header; pass it back as the
 `Mcp-Session-Id` header on subsequent `tools/list` / `tools/call` requests to the same
-`/mcp` endpoint.
+`/mcp` endpoint. A minimal, dependency-free reference client that runs this full
+handshake plus a `type_command` → `get_screenshot` round trip lives at
+`scripts/verify-mcp-agent.mjs`.
+
+### MCP tools
+
+Every terminal-control tool takes a `terminal_id` — the 12-hex-character id returned
+by `POST /api/sessions` (or shown in the Session Manager UI). Input schemas below were
+diffed against a live server's `tools/list` response and match field-for-field (only
+the boilerplate `$schema` line and JSON Schema's numeric-safety `maximum` bound on
+integers are omitted here as noise) — not hand-transcribed from memory.
+
+<details>
+<summary><code>get_screenshot</code> — capture a terminal's current visual state</summary>
+
+NomadTTY's terminals are text-mode (ttyd/tmux), so this returns an ANSI/text capture
+of the viewport rather than a pixel image — there's no server-side pixel renderer in
+this architecture (see `docs/ai/decision-log.md`).
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "terminal_id": { "type": "string", "description": "The session id, as returned by the Session Manager (12 hex chars)." },
+    "ansi": { "type": "boolean", "default": false, "description": "Include ANSI escape codes (colors/styles) in the output." }
+  },
+  "required": ["terminal_id"]
+}
+```
+
+Example call and response:
+```json
+// tools/call params: {"name":"get_screenshot","arguments":{"terminal_id":"91d34864c2ca"}}
+{
+  "terminal_id": "91d34864c2ca",
+  "format": "text",
+  "width": 80,
+  "height": 24,
+  "scroll_offset": 0,
+  "content": "root@vm:/home/user/nomadtty# echo readme_example\nreadme_example\nroot@vm:/home/user/nomadtty#\n"
+}
+```
+</details>
+
+<details>
+<summary><code>scroll_buffer</code> — scroll a terminal's view up/down</summary>
+
+Position is tracked per `terminal_id` and persists across calls; `"up"` moves further
+into scrollback history, `"down"` moves back toward the live view.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "terminal_id": { "type": "string", "description": "The session id to scroll." },
+    "direction": { "type": "string", "enum": ["up", "down"], "description": "\"up\" moves further into scrollback history; \"down\" moves toward the live view." },
+    "degree": {
+      "type": "object",
+      "properties": {
+        "unit": { "type": "string", "enum": ["lines", "pages"], "description": "Scroll by raw line count or by whole viewport pages." },
+        "amount": { "type": "integer", "exclusiveMinimum": 0, "description": "How many lines/pages to scroll." }
+      },
+      "required": ["unit", "amount"]
+    },
+    "ansi": { "type": "boolean", "default": false }
+  },
+  "required": ["terminal_id", "direction", "degree"]
+}
+```
+
+Example call and response (scrolling up one full page):
+```json
+// tools/call params: {"name":"scroll_buffer","arguments":{"terminal_id":"91d34864c2ca","direction":"up","degree":{"unit":"pages","amount":1}}}
+{
+  "terminal_id": "91d34864c2ca",
+  "scroll_offset": 24,
+  "at_top": false,
+  "at_bottom": false,
+  "width": 80,
+  "height": 24,
+  "content": "54\n55\n56\n57\n...\n"
+}
+```
+</details>
+
+<details>
+<summary><code>type_command</code> — inject text into a terminal's stdin</summary>
+
+Grants the same power as typing at the terminal directly — see
+[Security model](#security-model).
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "terminal_id": { "type": "string", "description": "The session id to type into." },
+    "text": { "type": "string", "description": "The literal text to inject (e.g. \"echo hello\")." },
+    "submit": { "type": "boolean", "default": true, "description": "Send Enter after the text to submit it." }
+  },
+  "required": ["terminal_id", "text"]
+}
+```
+
+Example call and response:
+```json
+// tools/call params: {"name":"type_command","arguments":{"terminal_id":"91d34864c2ca","text":"echo readme_example"}}
+{ "terminal_id": "91d34864c2ca", "injected": "echo readme_example", "submitted": true }
+```
+</details>
+
+<details>
+<summary><code>send_keystroke</code> — send a control key or raw hex bytes</summary>
+
+`mode="named"` uses tmux key notation (`"C-c"` for Ctrl+C, `"M-F4"` for Alt+F4,
+`"Enter"`, `"Escape"`, `"Up"`, …); `mode="hex"` sends raw two-digit hex-encoded bytes
+(`["1b","5b","41"]` for an escape sequence). Named keys are restricted to an explicit
+allowlist grammar so a value can't be misread as a tmux CLI flag.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "terminal_id": { "type": "string", "description": "The session id to send the keystroke to." },
+    "mode": { "type": "string", "enum": ["named", "hex"], "description": "\"named\" for tmux key notation, \"hex\" for raw hex-encoded bytes." },
+    "keys": { "type": "array", "items": { "type": "string" }, "description": "Required when mode=\"named\": e.g. [\"C-c\"], [\"M-F4\"], [\"Enter\"]." },
+    "hex": { "type": "array", "items": { "type": "string" }, "description": "Required when mode=\"hex\": two-digit hex bytes, e.g. [\"1b\",\"5b\",\"41\"]." }
+  },
+  "required": ["terminal_id", "mode"]
+}
+```
+
+Example call and response (Ctrl+C):
+```json
+// tools/call params: {"name":"send_keystroke","arguments":{"terminal_id":"91d34864c2ca","mode":"named","keys":["C-c"]}}
+{ "terminal_id": "91d34864c2ca", "mode": "named", "keys": ["C-c"] }
+```
+</details>
+
+<details>
+<summary><code>read_terminal_contents</code> — read the stdout buffer (full / head / tail / live-follow)</summary>
+
+`mode="tail"` (default) returns the most recent `lines` lines — efficient for
+polling recent output. `mode="head"` returns the oldest `lines` lines of scrollback.
+`mode="full"` returns everything, capped (see `MCP_MAX_CAPTURE_LINES`) and flagged via
+`truncated` if the cap was hit. Set `follow=true` **and** a `progressToken` in the
+request's `_meta` to stream new output live as `notifications/progress` SSE events for
+up to `MCP_FOLLOW_MAX_SECONDS` — this is the tool's real-time streaming mode.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "terminal_id": { "type": "string", "description": "The session id to read from." },
+    "mode": { "type": "string", "enum": ["full", "head", "tail"], "default": "tail" },
+    "lines": { "type": "integer", "exclusiveMinimum": 0, "description": "Line count for mode=\"head\"/\"tail\" (default 200)." },
+    "ansi": { "type": "boolean", "default": false, "description": "Include ANSI escape codes in the output." },
+    "follow": { "type": "boolean", "default": false, "description": "Stream new output as it arrives via progress notifications (requires the caller to set a progressToken)." }
+  },
+  "required": ["terminal_id"]
+}
+```
+
+Example call and response:
+```json
+// tools/call params: {"name":"read_terminal_contents","arguments":{"terminal_id":"91d34864c2ca","mode":"tail","lines":5}}
+{
+  "terminal_id": "91d34864c2ca",
+  "mode": "tail",
+  "ansi": false,
+  "content": "root@vm:/home/user/nomadtty# echo readme_example\nreadme_example\nroot@vm:/home/user/nomadtty#\n"
+}
+```
+</details>
+
+<details>
+<summary><code>get_process_status</code> — process tree running inside a terminal's shell</summary>
+
+Returns the pane's shell PID and every descendant process, with CPU%, memory%,
+elapsed time, and state — useful for checking whether a command an agent started is
+still running, hung, or has exited.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "terminal_id": { "type": "string", "description": "The session id to inspect." }
+  },
+  "required": ["terminal_id"]
+}
+```
+
+Example call and response:
+```json
+// tools/call params: {"name":"get_process_status","arguments":{"terminal_id":"91d34864c2ca"}}
+{
+  "terminal_id": "91d34864c2ca",
+  "shell_pid": 29035,
+  "processes": [
+    { "pid": 29035, "ppid": 29034, "cpuPercent": 0.2, "memPercent": 0, "elapsed": "00:11", "state": "Ss+", "command": "bash" }
+  ]
+}
+```
+</details>
+
+<details>
+<summary><code>list_active_ports</code> — host-wide TCP/UDP listening sockets</summary>
+
+Useful for confirming a dev server an agent just started is actually listening, or
+checking for a port conflict before starting one. Reflects the whole host, not one
+terminal in isolation, since NomadTTY sessions share the host network namespace.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "protocol": { "type": "string", "enum": ["tcp", "udp", "all"], "default": "all" }
+  }
+}
+```
+
+Example call and response:
+```json
+// tools/call params: {"name":"list_active_ports","arguments":{"protocol":"tcp"}}
+{
+  "protocol": "tcp",
+  "count": 8,
+  "ports": [
+    { "protocol": "tcp", "localAddress": "0.0.0.0", "localPort": 4200, "process": "node", "pid": 28298 }
+  ]
+}
+```
+</details>
 
 ### Security model
 
 `type_command`/`send_keystroke` grant the same power as typing at the terminal
 directly — command content is not, and cannot usefully be, sandboxed without
 defeating the tool's purpose. The security boundary is authentication and network
-exposure:
-- A bearer token (`MCP_AUTH_TOKEN`) is required for any non-loopback bind.
+exposure, per [`AGENTS.md`](AGENTS.md)'s non-negotiable rule that ttyd itself never
+listens on anything but `127.0.0.1`:
+- ttyd processes spawned by the Session Manager are **always** `127.0.0.1`-only and
+  `--writable`, exactly like the legacy model — only the separate MCP listener is
+  LAN-facing.
+- A bearer token (`MCP_AUTH_TOKEN`) is required for any non-loopback MCP bind.
 - `type_command` runs a best-effort denylist of obviously destructive one-liners
   (`rm -rf /`, fork bombs, `mkfs`, …) as defense-in-depth — not a sandbox, and
   disableable via `MCP_DENYLIST_ENABLED=0` if it produces a false positive.
