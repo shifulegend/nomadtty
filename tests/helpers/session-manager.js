@@ -17,6 +17,19 @@ async function apiCloseAllSessions(request) {
 }
 
 /**
+ * Creates a session directly via the API, with no browser involved. MCP
+ * tools act on the tmux session directly (server/mcp/tmux.js), so unlike
+ * createSessionViaUi() above -- which exists specifically to exercise the
+ * UI click path -- MCP tests should create sessions the same way a real
+ * agent would: an API call with no browser tab ever opened.
+ */
+async function apiCreateSession(request, label) {
+  const res = await request.post(`${BASE_URL}/api/sessions`, { data: { label } });
+  const { id } = await res.json();
+  return id;
+}
+
+/**
  * Drive session creation through the real UI (click, not a raw API POST),
  * since this suite is exercising user-facing behaviour. Returns the new
  * session's id (parsed from the resulting /term/<id>/ URL) and the row
@@ -48,4 +61,6 @@ function sessionRow(page, id) {
   return page.locator('.session-row', { has: page.locator(`[data-id="${id}"]`) });
 }
 
-module.exports = { apiListSessions, apiCloseAllSessions, createSessionViaUi, waitForTerminalReady, sessionRow };
+module.exports = {
+  apiListSessions, apiCloseAllSessions, apiCreateSession, createSessionViaUi, waitForTerminalReady, sessionRow,
+};

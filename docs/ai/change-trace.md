@@ -17,6 +17,36 @@
 
 ---
 
+### [2026-07-29] Automated test coverage for all 7 MCP tools; strengthened the "last joined" assertion
+- **Timestamp**: 2026-07-29 05:15 UTC
+- **Change**:
+  - Added `tests/specs/mcp-tools.spec.js` — 24 tests covering all 7 MCP tools over real HTTP (Playwright's
+    `request` fixture, no browser): protocol basics (`tools/list` shape, auth accept/reject),
+    `get_screenshot` (plain + ansi + unknown-id error), `read_terminal_contents` (`head`/`tail`/`full`/
+    `follow` SSE streaming), `scroll_buffer` (up/down/clamped-at-top), `type_command` (`submit:false` +
+    denylist), `send_keystroke` (named Ctrl+C interrupt, hex-mode submit, validation errors),
+    `get_process_status`, and `list_active_ports`.
+  - Added `tests/helpers/mcp-client.js` (JSON-RPC/SSE request helper, `pollUntil`, `outputHasOwnLine`) and
+    `apiCreateSession()` in `tests/helpers/session-manager.js`.
+  - Changed `tests/playwright.config.js`'s `webServer` to boot `server/main.js` (Session Manager + MCP)
+    instead of `server/session-manager.js` alone, with test-only MCP port/host/token/follow-timeout env
+    vars in `tests/helpers/env.js`.
+  - Fixed a real gap in `tests/specs/session-persistence.spec.js`: the "last joined" test asserted only
+    `not.toContainText('never joined')`, which would still pass even if the timestamp rendered as
+    something broken (empty string, `NaN:NaN:NaN`, etc.) — now asserts the positive shape, a real
+    `H:MM:SS` clock-time pattern.
+  - Along the way, repeated (and fixed) the exact "matched the input echo, not real output" bug already
+    documented for the browser suite (`docs/ai/mistakes.md` 2026-07-29-009), this time in the new
+    HTTP-based tests — see 2026-07-29-013.
+  - Re-verified: 35/35 passing across many repeated full-suite runs (one isolated, unreproduced flake in
+    roughly a dozen runs — consistent with the known PTY-redraw flakiness class, not a new regression).
+- **Rationale**: User asked to test all MCP tools and specifically questioned whether the "last joined"
+  text was tested correctly — it wasn't, rigorously; both gaps are now closed.
+- **Affected areas**: `tests/specs/mcp-tools.spec.js` (new), `tests/helpers/mcp-client.js` (new),
+  `tests/helpers/session-manager.js`, `tests/helpers/env.js`, `tests/playwright.config.js`,
+  `tests/specs/session-persistence.spec.js`
+- **Related mistakes**: `docs/ai/mistakes.md` 2026-07-29-013 (references 2026-07-29-009)
+
 ### [2026-07-29] Session Manager & Back button screenshots; fixed a layout recursion + a rendering bug
 - **Timestamp**: 2026-07-29 04:50 UTC
 - **Change**:

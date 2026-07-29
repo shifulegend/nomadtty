@@ -3,7 +3,9 @@
 const fs = require('fs');
 const path = require('path');
 const { defineConfig, devices } = require('@playwright/test');
-const { SESSION_MANAGER_PORT, TTYD_BASE_PORT, BASE_URL } = require('./helpers/env');
+const {
+  SESSION_MANAGER_PORT, TTYD_BASE_PORT, BASE_URL, MCP_PORT, MCP_HOST, MCP_AUTH_TOKEN, MCP_FOLLOW_MAX_SECONDS,
+} = require('./helpers/env');
 
 /* This sandbox pre-installs Chromium at a fixed path for a specific
  * Playwright build; `npm install` here can float @playwright/test to a
@@ -38,13 +40,21 @@ module.exports = defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'], launchOptions: { executablePath } } },
   ],
   webServer: {
-    command: `node ${path.join(__dirname, '..', 'server', 'session-manager.js')}`,
+    /* main.js (not session-manager.js directly) so the MCP listener boots
+     * too -- server/session-manager.js itself stays independently runnable
+     * unchanged (see its own require.main guard); this only changes which
+     * entry point the test run uses. */
+    command: `node ${path.join(__dirname, '..', 'server', 'main.js')}`,
     url: `${BASE_URL}/api/sessions`,
     reuseExistingServer: false,
     timeout: 15000,
     env: {
       SESSION_MANAGER_PORT,
       TTYD_BASE_PORT,
+      MCP_PORT,
+      MCP_HOST,
+      MCP_AUTH_TOKEN,
+      MCP_FOLLOW_MAX_SECONDS,
     },
   },
 });

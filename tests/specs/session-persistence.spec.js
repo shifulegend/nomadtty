@@ -75,5 +75,12 @@ test('joining updates the session\'s last-joined timestamp in the list', async (
   await waitForTerminalReady(page);
 
   await page.goto(BASE_URL + '/');
-  await expect(sessionRow(page, id).locator('.session-meta')).not.toContainText('never joined', { timeout: 8000 });
+  // A weaker `not.toContainText('never joined')` would also pass if
+  // fmtTime() regressed to rendering "", "NaN:NaN:NaN", "Invalid Date",
+  // etc. — none of those contain the literal string "never joined" either.
+  // Assert the positive shape instead: a real clock-time string (fmtTime()
+  // in public/session-manager.js renders via Date.prototype.toLocaleTimeString(),
+  // e.g. "3:45:12 PM" in a 12-hour locale or "15:45:12" in a 24-hour one).
+  await expect(sessionRow(page, id).locator('.session-meta'))
+    .toHaveText(/last joined:\s*\d{1,2}:\d{2}:\d{2}(\s*[AP]M)?/i, { timeout: 8000 });
 });

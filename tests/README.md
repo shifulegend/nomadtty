@@ -1,9 +1,9 @@
 # NomadTTY — Playwright E2E Suite
 
 End-to-end tests for the Session Manager (`server/session-manager.js`,
-`public/session-manager.*`) and the terminal it manages. This directory is
-fully self-contained: it owns its own `package.json`, Playwright config, and
-`node_modules` — nothing outside `tests/` was changed to make it pass.
+`public/session-manager.*`), the terminal it manages, and the MCP server
+(`server/mcp/**`). This directory is fully self-contained: it owns its own
+`package.json`, Playwright config, and `node_modules`.
 
 ## Requirements
 
@@ -22,11 +22,11 @@ npm install        # first time only
 npx playwright test
 ```
 
-The Playwright config (`playwright.config.js`) starts
-`server/session-manager.js` itself (on test-only ports — see
-`helpers/env.js` — distinct from the app's real defaults so a test run
-never collides with a live NomadTTY instance) and tears it down afterwards.
-No manual server startup is needed.
+The Playwright config (`playwright.config.js`) starts `server/main.js` itself
+(Session Manager + MCP server together, on test-only ports/token — see
+`helpers/env.js` — distinct from the app's real defaults so a test run never
+collides with a live NomadTTY instance) and tears it down afterwards. No
+manual server startup is needed.
 
 ## Layout
 
@@ -51,6 +51,16 @@ No manual server startup is needed.
   it matches `line` only as a complete line on its own, which is immune to a
   terminal redraw splitting the *echoed input* text mid-word (see
   `docs/ai/mistakes.md` 2026-07-29-009 for the flake this fixed).
+- `helpers/mcp-client.js` — a minimal MCP JSON-RPC/SSE client for the tests
+  in `specs/mcp-tools.spec.js` (no `@modelcontextprotocol/sdk` dependency —
+  keeps the test client's implementation independent of the server's).
+  `outputHasOwnLine(content, marker)` is this file's equivalent of
+  `ws-capture.js`'s `waitForOutputLine()`, for the same reason: a naive
+  `content.includes(marker)` against a tmux capture is fooled whenever
+  `marker` also appears in the command that was *typed* to produce it (e.g.
+  `seq 1 300`'s own echoed input already contains "300") — see
+  `docs/ai/mistakes.md` 2026-07-29-013. `pollUntil(fn, opts)` is the generic
+  retry helper these HTTP-based tests use in place of a WebSocket wait.
 - `specs/session-lifecycle.spec.js` — non-interactive Session Manager states:
   empty state, list populating, a closed session disappearing, multiple
   sessions, background polling.
@@ -59,15 +69,31 @@ No manual server startup is needed.
   resize, Ctrl+C interrupting a running command.
 - `specs/session-persistence.spec.js` — leaving and rejoining a session
   reattaches to the same tmux session with scrollback intact, and updates
-  the list's last-joined timestamp.
+  the list's last-joined timestamp (asserting the actual rendered clock-time
+  pattern, not just the absence of the placeholder "never joined" text).
+- `specs/mcp-tools.spec.js` — all 7 MCP tools over real HTTP (no browser):
+  protocol basics (`tools/list`, bearer-token auth), `get_screenshot`,
+  `read_terminal_contents` (`head`/`tail`/`full`/live-`follow` SSE
+  streaming), `scroll_buffer`, `type_command`, `send_keystroke` (named +
+  hex, including a real Ctrl+C interrupt), `get_process_status`, and
+  `list_active_ports` — plus validation-error paths for each.
 
 ## Test isolation
 
 `server/session-manager.js` keeps all open sessions in a single in-memory
-registry shared by every browser context that talks to it, so the suite
-runs with `workers: 1` (see `playwright.config.js`) rather than in parallel
-— two specs racing to create/close sessions against the same registry would
-make each other's list-state assertions flaky. Each spec cleans up the
-sessions it created in `afterEach`/`beforeEach`, and `global-teardown.js`
-sweeps any stragglers before the server itself is stopped, so no ttyd/tmux
-processes are left running after a test run.
+registry shared by every browser context (and every MCP session) that talks
+to it, so the suite runs with `workers: 1` (see `playwright.config.js`)
+rather than in parallel — two specs racing to create/close sessions against
+the same registry would make each other's list-state assertions flaky. Each
+spec cleans up the sessions it created in `afterEach`/`beforeEach`, and
+`global-teardown.js` sweeps any stragglers before the server itself is
+stopped, so no ttyd/tmux processes are left running after a test run.
+
+## A note on flakiness
+
+This suite drives a real PTY (tmux) through a real terminal emulator (ttyd),
+not a mock — occasional redraw-timing flakiness (a tmux status-bar refresh
+or similar landing mid-keystroke) is a known, documented class of issue (see
+`docs/ai/mistakes.md` 2026-07-29-009 and -013), not evidence the suite is
+unreliable. If a run shows an isolated failure, re-run before assuming a
+regression; if a *specific* test fails repeatedly, that's a real signal.

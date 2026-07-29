@@ -5,6 +5,33 @@
 
 ---
 
+### [2026-07-29-013] New MCP-tool HTTP tests repeated the "matched the input, not the output" bug
+- **Timestamp**: 2026-07-29 05:10 UTC
+- **Summary**: Writing `tests/specs/mcp-tools.spec.js`, several completion-polling predicates used
+  `content.includes(marker)` where `marker` also appeared inside the command *typed* to produce it
+  (`seq 1 300`'s own echoed input already contains the substring "300"; `printf '...red_ansi_marker...'`
+  echoes that text before executing). Every one of those polls could resolve on the echoed input alone,
+  before the command had actually run — one (`ansi=true`) failed outright when its assertion depended on the
+  real output; two others (`mode=head`, `scroll_buffer`) failed downstream because `head`/`scroll_buffer`
+  were then called before the shell had actually produced the scrollback they were supposed to inspect;
+  one (`mode=tail`) *passed* despite the same flaw, purely because its assertions happened to also hold for
+  the wrong (premature) content — a false-positive pass, not a working test.
+- **Root cause**: This is the exact same bug class as mistakes.md 2026-07-29-009 (documented for the
+  WebSocket/browser suite's `waitForOutputCount` → `waitForOutputLine` fix), just not carried over when
+  writing a *second*, HTTP-based test suite against the same terminals. Knowing a lesson in one test file
+  doesn't prevent repeating it in a sibling one — the underlying PTY behavior (canonical-mode echo of
+  typed input) is identical regardless of which client (browser WS vs raw HTTP) is watching it.
+- **Affected files**: `tests/specs/mcp-tools.spec.js`, `tests/helpers/mcp-client.js`
+- **Detection method**: Ran the new suite repeatedly (not just once) and read the actual captured
+  `content` in each failure message rather than assuming the polling predicate was correct.
+- **Correction**: Added `outputHasOwnLine(content, marker)` to `helpers/mcp-client.js` — the HTTP-call
+  equivalent of `ws-capture.js`'s `waitForOutputLine()` — and replaced every completion-check predicate in
+  `mcp-tools.spec.js` that could be satisfied by echoed input with it.
+- **Prevention rule**: Any test polling for "has this command finished running" against a raw PTY/tmux
+  capture — over *any* transport (WebSocket, HTTP, direct `tmux capture-pane`) — must check for the output
+  as a complete line of its own, never a bare substring/count, and this applies per test file: check for
+  and reuse the existing helper (or its equivalent) rather than re-deriving the naive version from scratch.
+
 ### [2026-07-29-012] ttyd's default WebGL renderer painted incorrectly under headless/software GPU
 - **Timestamp**: 2026-07-29 04:40 UTC
 - **Summary**: Screenshots of `/term/<id>/` taken via headless Playwright (for README documentation) showed
