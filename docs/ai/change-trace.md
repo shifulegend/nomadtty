@@ -35,6 +35,44 @@
   other element. Temporary verification spec deleted afterward; not committed.
 - **Related decisions**: none new -- reuses the existing `LICENSE`/`NOTICE` copyright holder.
 
+### [2026-07-29] Footer pinned to true screen bottom; NomadTTY icon+wordmark banner added
+- **Timestamp**: 2026-07-29 12:20 UTC
+- **Change**: Follow-up to the copyright footer entry above. User reported the footer
+  sat mid-screen (right after `#empty-state`, with a large gap of unstyled black space
+  below it) rather than at the actual bottom of the viewport. Fixed by making `#sm-root`
+  a `display:flex;flex-direction:column` container with `min-height:100dvh` (with a
+  `100vh` fallback declared first for older browsers) and giving `#sm-footer`
+  `margin-top:auto` so it's pushed to the true bottom of the screen when content is
+  short, while still flowing naturally right after the last session row when the list
+  is long enough to fill/exceed the viewport (verified with 8 sessions -- footer
+  appears after the last row, does not overlap or get clipped). `padding-bottom` on
+  `#sm-root` now also accounts for `env(safe-area-inset-bottom)`, matching the existing
+  `safe-area-inset-top` handling already used for the top padding. Also added a small
+  `#sm-brand` row (`/favicon.svg` at 20x20 + "NomadTTY" in the app's blue accent,
+  13px monospace, no bold/letter-spacing) above the `<h1>Session Manager</h1>` heading,
+  answering the user's question about why no NomadTTY banner existed on the page --
+  previously the app name appeared only in `<title>`/OG tags, never visibly on-page.
+- **Rationale**: A sticky-footer pattern is the standard fix for "footer floats in the
+  middle when content is short." The banner request was evaluated against `DESIGN.md`:
+  its "avoid full-width banners" rule is scoped explicitly to the terminal grid/canvas,
+  not the separate full-screen Session Manager modal state, so a small brand row here
+  does not violate that constraint; kept to DESIGN.md's typographic rules (monospace,
+  single blue accent, no bold/letter-spacing tricks, small utilitarian sizing).
+- **Affected areas**: `public/session-manager.html`,
+  `docs/assets/screenshot-session-manager-mobile.png` (regenerated again)
+- **Verification**: Live server boot; Playwright screenshots at the Pixel 7 mobile
+  viewport for both the empty-list state (footer flush with viewport bottom, ~20px
+  gap matching the safe-area padding) and an 8-session list (footer flows after the
+  last row, no overlap, zero horizontal overflow in both cases). Full Playwright suite
+  re-run twice: one run showed a single isolated failure
+  (`android-mobile-ux.spec.js`'s Back-button-overlap test) that passed cleanly on
+  immediate re-run alone and again on a full second full-suite run (55/55 both times)
+  -- consistent with the documented PTY-redraw-timing flake class in
+  `tests/README.md`, not a regression from this change (which touches only
+  `public/session-manager.html`, never the terminal/Back-button code path). Temporary
+  verification specs deleted afterward; not committed.
+- **Related decisions**: none new.
+
 ### [2026-07-29] Comprehensive branding, SEO metadata, and favicon/manifest assets added
 - **Timestamp**: 2026-07-29 11:39 UTC
 - **Change**: Added page titles/meta description/theme-color/robots/Open Graph/Twitter
