@@ -1,0 +1,24 @@
+# NomadTTY — systemd service for the Session Manager + MCP backend.
+# Starts server/main.js (Session Manager on SESSION_MANAGER_PORT, loopback-only;
+# MCP server on MCP_PORT, bind/auth controlled by MCP_HOST/MCP_AUTH_TOKEN).
+# Env vars live in an EnvironmentFile, not inline, so MCP_AUTH_TOKEN never shows
+# up in `systemctl cat`/unit file listings.
+#
+# Copy to /etc/systemd/system/nomadtty.service then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now nomadtty
+
+[Unit]
+Description=NomadTTY backend (Session Manager + MCP server)
+After=network.target
+
+[Service]
+WorkingDirectory=/home/ubuntu/nomadtty
+EnvironmentFile=/etc/nomadtty/nomadtty.env
+ExecStart=/home/linuxbrew/.linuxbrew/bin/node server/main.js
+Restart=always
+RestartSec=3
+User=ubuntu
+
+[Install]
+WantedBy=multi-user.target
