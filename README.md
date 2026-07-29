@@ -367,7 +367,7 @@ undiscovered bugs, all now fixed:
 
 ### Concurrent-interaction stress testing
 
-Beyond static rendering, `tests/specs/android-mobile-stress.spec.js` (8 tests) validates
+Beyond static rendering, `tests/specs/android-mobile-stress.spec.js` (14 tests) validates
 the terminal under realistic *concurrent* mobile interaction — typing, scrolling,
 rotating the device, and toggling the on-screen keyboard, all while a long-running
 foreground process is actively streaming output, the exact condition of chatting with
@@ -381,14 +381,31 @@ theory and, interestingly, found `claude -p` doesn't incrementally stream to a
 non-interactive terminal at all — it prints nothing for several seconds, then dumps its
 whole response at once — see `docs/ai/decision-log.md`.)
 
-Scenarios covered: scrolling and typing during an active stream, device rotation
+Base scenarios: scrolling and typing during an active stream, device rotation
 (portrait → landscape → portrait) with the on-screen keyboard held "open", rapid Fn-row
 and zoom toggling mid-stream, CTRL+C interrupting a stream via the toolbar, and tapping
 Back mid-stream then re-Joining to confirm the stream completed cleanly server-side
-(tmux keeps running after the browser tab navigates away). Two more tests were added to
-`android-mobile-ux.spec.js` specifically for touch-target precision and on-screen-keyboard
-reflow: a touch-drag-vs-tap regression test, and an exhaustive keyboard-toggle test (10
-open/close cycles back to back).
+(tmux keeps running after the browser tab navigates away).
+
+On top of that, a dedicated block of **6 on-screen-keyboard-toggle-during-active-generation**
+scenarios, each pairing a keyboard open/close reflow with a distinct concurrent condition:
+
+1. Rapid repeated open/close cycles throughout an active stream.
+2. Typing that lands correctly right as the keyboard opens mid-stream (mid-transition,
+   not after waiting for it to settle).
+3. Opening the keyboard while the Fn row is *also* expanded mid-stream — two independent
+   reflow triggers competing for vertical space at once.
+4. Opening the keyboard while zoomed in mid-stream.
+5. A scroll gesture while the keyboard is open mid-stream — confirms the (now-disabled,
+   see below) scroll gesture stays a safe no-op even stacked with a keyboard reflow.
+6. Tapping Back while the keyboard is open mid-stream, then re-Joining — confirms the
+   Session Manager itself still renders usably in a reduced/transitioning viewport, and
+   the stream (running server-side regardless of the browser tab) completed cleanly.
+
+Two more tests were added to `android-mobile-ux.spec.js` specifically for touch-target
+precision and on-screen-keyboard reflow outside of an active stream: a touch-drag-vs-tap
+regression test, and an exhaustive keyboard-toggle test (10 open/close cycles back to
+back).
 
 | Rotated to landscape, keyboard "open", mid-stream | Fn row expanded mid-stream | Zoomed in mid-stream | On-screen keyboard "open" reflow |
 |---|---|---|---|

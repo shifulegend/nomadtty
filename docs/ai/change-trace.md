@@ -17,6 +17,33 @@
 
 ---
 
+### [2026-07-29] Added the dedicated on-screen-keyboard-toggle-during-generation test block requested but not fully covered by the prior stress-testing pass
+- **Timestamp**: 2026-07-29 07:45 UTC
+- **Change**: Added 6 new tests to `tests/specs/android-mobile-stress.spec.js`, each pairing an on-screen
+  keyboard open/close reflow with a distinct concurrent condition during an active stream: (1) rapid
+  repeated open/close cycles, (2) typing landing correctly mid-transition as the keyboard opens, (3)
+  keyboard + Fn row open simultaneously, (4) keyboard + zoom simultaneously, (5) keyboard open + an
+  aggressive scroll gesture, (6) tapping Back while the keyboard is open then re-Joining. Test 6 initially
+  asserted `window.innerHeight` reset to full size after navigating away, which failed — Playwright's
+  `setViewportSize` is sticky across navigation (unlike a real device's `visualViewport`, which reverts when
+  the keyboard actually closes) — fixed by asserting the Session Manager renders usably at the still-reduced
+  height instead, then explicitly restoring full height before re-Joining, matching what a real device does
+  when the app backgrounds/navigates.
+- **Rationale**: The prior stress-testing pass (previous change-trace entry) only exercised the on-screen
+  keyboard in a single test combined with device rotation, and covered "exhaustive keyboard toggle" only
+  *without* an active stream (in `android-mobile-ux.spec.js`). The original task explicitly asked for
+  "at least 5 to 6 additional complex test scenarios involving the on-screen keyboard toggle during active
+  model generation" as its own requirement — a gap flagged directly by the user after reviewing the first
+  pass's summary, not caught during that pass itself.
+- **Affected areas**: `tests/specs/android-mobile-stress.spec.js`, `.claude/rules/tests.md`,
+  `tests/README.md`, `README.md`
+- **Related commit**: (pending — follow-up to "test: implement rigorous android simulator testing and
+  capture mobile screenshots")
+- **Related decisions**: none new
+- **Related mistakes**: none new (no additional bugs found by these 6 tests; they confirm the existing
+  `updateLayout()` reflow mechanism and the already-fixed touch-scroll/toolbar-drag bugs hold up under
+  keyboard-toggle-specific compound stress)
+
 ### [2026-07-29] Concurrent-interaction stress testing found and fixed a real screen-distortion bug and a real accidental-button-press bug
 - **Timestamp**: 2026-07-29 07:20 UTC
 - **Change**:

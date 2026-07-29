@@ -92,19 +92,25 @@ manual server startup is needed.
   (a modifier-key double-send), 2026-07-29-017 (the Back button covering the
   toolbar's own "A+" button at full scroll), and 2026-07-29-019 (toolbar buttons
   firing on a drag/swipe, not just a stationary tap).
-- `specs/android-mobile-stress.spec.js` — concurrent-interaction stress testing,
-  also on the Pixel 7 profile: typing while scrolling, scrolling while a
+- `specs/android-mobile-stress.spec.js` (14 tests) — concurrent-interaction stress
+  testing, also on the Pixel 7 profile: typing while scrolling, scrolling while a
   long-running foreground process actively streams output (see
   `scripts/simulate-model-stream.mjs` and `docs/ai/decision-log.md` for why a
   deterministic script stands in for a real AI CLI/model here), typing while
-  streaming, device rotation with the on-screen keyboard simulated open, and
-  keyboard-toggle/Fn-row/zoom stress *during* an active stream, plus a
-  CTRL+C-interrupts-a-stream test and a Back-mid-stream-then-rejoin test. This
-  file is what surfaced 2026-07-29-018 — touch-scroll spamming Up/Down-arrow
-  escape sequences into the PTY as real input on every gesture, corrupting
-  visible output — caught by literally looking at a mid-stress screenshot, not
-  just by a passing/failing assertion (the initial version of these tests
-  didn't check for it and would have passed regardless).
+  streaming, device rotation with the on-screen keyboard simulated open, rapid
+  Fn-row/zoom stress *during* an active stream, a CTRL+C-interrupts-a-stream
+  test, and a Back-mid-stream-then-rejoin test. Six of the fourteen are a
+  dedicated "on-screen keyboard toggle during active generation" block, each
+  pairing a keyboard open/close reflow with a distinct concurrent condition:
+  (1) rapid repeated open/close cycles, (2) typing that lands mid-transition
+  as the keyboard opens, (3) keyboard + Fn row open simultaneously, (4)
+  keyboard + zoom simultaneously, (5) keyboard open + an aggressive scroll
+  gesture, (6) tapping Back while the keyboard is open, then re-Joining.
+  This file is what surfaced 2026-07-29-018 — touch-scroll spamming
+  Up/Down-arrow escape sequences into the PTY as real input on every gesture,
+  corrupting visible output — caught by literally looking at a mid-stress
+  screenshot, not just by a passing/failing assertion (the initial version of
+  these tests didn't check for it and would have passed regardless).
   `tests/helpers/stress.js` holds the shared helpers (`startStream`,
   `touchScrollTerminal`, `toggleOnScreenKeyboard`, `rotateDevice`,
   `collectPageErrors`) used by both this file and the touch-sensitivity /

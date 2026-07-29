@@ -151,6 +151,163 @@ test('device rotation (portrait -> landscape -> portrait) with the on-screen key
   expect(errors).toEqual([]);
 });
 
+/*
+ * On-screen-keyboard-toggle-during-active-generation scenarios (6). Each one
+ * pairs a keyboard open/close reflow with a distinct concurrent condition,
+ * on top of the single rotation+keyboard combination above -- this is the
+ * dedicated block for "keyboard toggle while a model is actively
+ * generating," not just a single incidental case bundled into a different
+ * test. Each toggle drives updateLayout() (src/kb.js) via a real
+ * visualViewport resize (see toggleOnScreenKeyboard in helpers/stress.js),
+ * not a fake shim.
+ */
+
+test('keyboard toggle 1/6: rapid repeated open/close cycles throughout an active stream', async ({ page }) => {
+  const errors = collectPageErrors(page);
+  const capture = captureTerminalSocket(page);
+  await createSessionViaUi(page);
+  await waitForTerminalReady(page);
+  await capture.waitForSocket();
+
+  await startStream(page, { words: 500, delayMs: 12 });
+  for (let i = 0; i < 5; i++) {
+    await toggleOnScreenKeyboard(page, PIXEL_7.viewport, true);
+    await toggleOnScreenKeyboard(page, PIXEL_7.viewport, false);
+  }
+  await capture.waitForOutputLine('[stream complete]', 15000);
+  assertSaneResizeFrames(capture.getResizeFrames());
+  expect(errors).toEqual([]);
+});
+
+test('keyboard toggle 2/6: typing lands correctly right as the keyboard opens mid-stream', async ({ page }) => {
+  const errors = collectPageErrors(page);
+  const capture = captureTerminalSocket(page);
+  await createSessionViaUi(page);
+  await waitForTerminalReady(page);
+  await capture.waitForSocket();
+
+  await startStream(page, { words: 300, delayMs: 15 });
+  await page.waitForTimeout(300);
+  // Open the keyboard and type into the SAME reflow window, rather than
+  // waiting for the layout pass to fully settle first -- proves typed
+  // input isn't dropped or misdirected during the transition itself.
+  await toggleOnScreenKeyboard(page, PIXEL_7.viewport, true);
+  await page.click('.xterm-screen');
+  await page.keyboard.type('echo typed_during_keyboard_open_transition');
+  await page.keyboard.press('Enter');
+  await capture.waitForOutputLine('typed_during_keyboard_open_transition');
+  await toggleOnScreenKeyboard(page, PIXEL_7.viewport, false);
+
+  await capture.waitForOutputLine('[stream complete]', 15000);
+  expect(errors).toEqual([]);
+});
+
+test('keyboard toggle 3/6: opening the keyboard while the Fn row is also expanded mid-stream', async ({ page }) => {
+  const errors = collectPageErrors(page);
+  const capture = captureTerminalSocket(page);
+  await createSessionViaUi(page);
+  await waitForTerminalReady(page);
+  await capture.waitForSocket();
+
+  await startStream(page, { words: 400, delayMs: 12 });
+  await page.waitForTimeout(300);
+  // Two independent reflow triggers competing for vertical space at once:
+  // the Fn row (kb.js's own toolbar height) and the simulated keyboard
+  // (visualViewport height).
+  await page.locator('#kb-fn').tap();
+  await toggleOnScreenKeyboard(page, PIXEL_7.viewport, true);
+  const rect = await page.evaluate(() => document.getElementById('terminal-container').getBoundingClientRect());
+  expect(rect.height).toBeGreaterThan(0);
+  expect(rect.top).toBeGreaterThanOrEqual(0);
+  await toggleOnScreenKeyboard(page, PIXEL_7.viewport, false);
+  await page.locator('#kb-fn').tap();
+
+  await capture.waitForOutputLine('[stream complete]', 15000);
+  assertSaneResizeFrames(capture.getResizeFrames());
+  expect(errors).toEqual([]);
+});
+
+test('keyboard toggle 4/6: opening the keyboard while zoomed in mid-stream', async ({ page }) => {
+  const errors = collectPageErrors(page);
+  const capture = captureTerminalSocket(page);
+  await createSessionViaUi(page);
+  await waitForTerminalReady(page);
+  await capture.waitForSocket();
+
+  await startStream(page, { words: 400, delayMs: 12 });
+  await page.waitForTimeout(300);
+  await page.locator('#kb button', { hasText: 'A+' }).first().tap();
+  await toggleOnScreenKeyboard(page, PIXEL_7.viewport, true);
+  await page.waitForTimeout(200);
+  await toggleOnScreenKeyboard(page, PIXEL_7.viewport, false);
+
+  await capture.waitForOutputLine('[stream complete]', 15000);
+
+  await page.click('.xterm-screen');
+  await page.keyboard.type('echo alive_after_keyboard_plus_zoom');
+  await page.keyboard.press('Enter');
+  await capture.waitForOutputLine('alive_after_keyboard_plus_zoom');
+  expect(errors).toEqual([]);
+});
+
+test('keyboard toggle 5/6: a scroll gesture while the keyboard is open mid-stream stays a safe no-op', async ({ page }) => {
+  const errors = collectPageErrors(page);
+  const capture = captureTerminalSocket(page);
+  await createSessionViaUi(page);
+  await waitForTerminalReady(page);
+  await capture.waitForSocket();
+
+  await startStream(page, { words: 500, delayMs: 12 });
+  await page.waitForTimeout(300);
+  await toggleOnScreenKeyboard(page, PIXEL_7.viewport, true);
+  // Same aggressive overshoot swipe as the dedicated scroll-safety test,
+  // now specifically while the keyboard reflow is also in effect -- two
+  // known-risky conditions stacked at once.
+  await touchScrollTerminal(page, { deltaY: 2000, steps: 10 });
+  await page.waitForTimeout(300);
+  await toggleOnScreenKeyboard(page, PIXEL_7.viewport, false);
+
+  await capture.waitForOutputLine('[stream complete]', 15000);
+  expect(/\x1b(\[|O)[AB]/.test(capture.getOutput())).toBe(false);
+  expect(errors).toEqual([]);
+});
+
+test('keyboard toggle 6/6: tapping Back while the keyboard is open mid-stream, then re-Joining, resets cleanly', async ({ page }) => {
+  const errors = collectPageErrors(page);
+  const capture = captureTerminalSocket(page);
+  const id = await createSessionViaUi(page);
+  await waitForTerminalReady(page);
+  await capture.waitForSocket();
+
+  await startStream(page, { words: 300, delayMs: 12 });
+  await page.waitForTimeout(300);
+  await toggleOnScreenKeyboard(page, PIXEL_7.viewport, true);
+
+  await page.locator('#back-btn').tap();
+  await page.waitForURL(/\/$/, { timeout: 10000 });
+  // The Session Manager itself must render usably even in the reduced
+  // "keyboard still open" viewport a real device would briefly report
+  // mid-transition right after navigating away -- not just once the
+  // keyboard has fully closed.
+  await expect(sessionRow(page, id)).toBeVisible();
+  await expect(sessionRow(page, id).locator('.sm-btn.join')).toBeVisible();
+
+  // Restore full height (a real device's keyboard closes once the app
+  // backgrounds/navigates -- Playwright's viewport size, unlike a real
+  // visualViewport, doesn't revert on its own) before re-Joining, and
+  // confirm the stream (which kept running server-side the whole time)
+  // completed without corruption.
+  await toggleOnScreenKeyboard(page, PIXEL_7.viewport, false);
+  const capture2 = captureTerminalSocket(page);
+  await sessionRow(page, id).locator('.sm-btn.join').tap();
+  await page.waitForURL(new RegExp(`/term/${id}/`));
+  await waitForTerminalReady(page);
+  await capture2.waitForSocket();
+  await capture2.waitForOutput('[stream complete]');
+
+  expect(errors).toEqual([]);
+});
+
 test('rapidly toggling the Fn row throughout an active stream does not corrupt layout or output', async ({ page }) => {
   const errors = collectPageErrors(page);
   const capture = captureTerminalSocket(page);

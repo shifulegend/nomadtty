@@ -10,7 +10,7 @@
   testing (`specs/android-mobile-stress.spec.js`) — both via Playwright's
   `devices['Pixel 7']` emulation (see docs/ai/decision-log.md for why this is used
   instead of a full Android emulator). Run: `cd tests && npm install && npx playwright
-  test`. 49 tests, must stay 49/49 passing (occasional isolated PTY-redraw-timing
+  test`. 55 tests, must stay 55/55 passing (occasional isolated PTY-redraw-timing
   flakes are a known class — see `tests/README.md`'s "A note on flakiness" — a
   *repeatable* failure on a specific test is the real signal).
   See `tests/README.md` for why terminal-output assertions read the ttyd WebSocket
@@ -21,10 +21,11 @@
 
 ### After any src/kb.js change
 1. `cd tests && npx playwright test specs/android-mobile-ux.spec.js
-   specs/android-mobile-stress.spec.js` — must stay 14/14 passing. Covers the
+   specs/android-mobile-stress.spec.js` — must stay 20/20 passing. Covers the
    mobile-specific checklist below, plus concurrent-interaction stress (typing/
    scrolling/rotation/keyboard-toggle during an actively streaming foreground
-   process), on a real Pixel 7 device emulation profile (real DPR/touch), automatically.
+   process, including 6 dedicated keyboard-toggle-during-generation scenarios),
+   on a real Pixel 7 device emulation profile (real DPR/touch), automatically.
 2. Reload nginx: `sudo systemctl reload nginx` (legacy nginx/ttyd deployment only).
 3. Open terminal in browser; confirm toolbar at top, two rows visible.
 4. DevTools console: zero JS errors.
@@ -59,7 +60,7 @@
 2. `docker run --rm -p 18080:80 nomadtty-test` → open `http://localhost:18080`.
 
 ### After any server/session-manager.js, server/mcp/**, or server/main.js change
-1. `cd tests && npx playwright test` — must stay 39/39 passing. This alone covers what
+1. `cd tests && npx playwright test` — must stay 55/55 passing. This alone covers what
    used to be a manual checklist: both listeners booting with no port conflicts,
    `tools/list` returning all 7 tools with valid schemas, every tool's happy path and
    its validation-error paths, auth accept/reject, and the boot-security refusal.
