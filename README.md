@@ -509,7 +509,9 @@ handshake plus a `type_command` → `get_screenshot` round trip lives at
 ### MCP tools
 
 Every terminal-control tool takes a `terminal_id` — the 12-hex-character id returned
-by `POST /api/sessions` (or shown in the Session Manager UI). Input schemas below were
+by `POST /api/sessions`, by `create_session` below, or shown in the Session Manager UI.
+(`list_sessions` and `create_session` are the two exceptions, since their whole purpose
+is finding or making a `terminal_id` in the first place.) Input schemas below were
 diffed against a live server's `tools/list` response and match field-for-field (only
 the boilerplate `$schema` line and JSON Schema's numeric-safety `maximum` bound on
 integers are omitted here as noise) — not hand-transcribed from memory.
@@ -731,6 +733,88 @@ Example call and response:
   "ports": [
     { "protocol": "tcp", "localAddress": "0.0.0.0", "localPort": 4200, "process": "node", "pid": 28298 }
   ]
+}
+```
+</details>
+
+<details>
+<summary><code>list_sessions</code> — discover currently open terminal sessions</summary>
+
+No arguments. Returns every session in the same registry the Session Manager UI shows
+(id, label, status, timestamps) — use this before acting on a session whose
+`terminal_id` you don't already have.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Example call and response:
+```json
+// tools/call params: {"name":"list_sessions","arguments":{}}
+{
+  "sessions": [
+    { "terminal_id": "1a89eb36300d", "label": "mcp-live-verify", "status": "running", "created_at": 1785341639858, "last_joined_at": null }
+  ],
+  "count": 1
+}
+```
+</details>
+
+<details>
+<summary><code>create_session</code> — open a new terminal session</summary>
+
+Opens a fresh ttyd+tmux pair and returns its `terminal_id`, which every other tool
+needs. `label` is optional (defaults to a short auto-generated name). The session
+persists — via tmux — until explicitly closed with `close_session`. Its `status` is
+`"starting"` immediately after creation and becomes `"running"` shortly after — poll
+`list_sessions` if you need to confirm it's ready before typing into it.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "label": { "type": "string" }
+  }
+}
+```
+
+Example call and response:
+```json
+// tools/call params: {"name":"create_session","arguments":{"label":"mcp-live-verify"}}
+{
+  "terminal_id": "1a89eb36300d",
+  "label": "mcp-live-verify",
+  "status": "starting"
+}
+```
+</details>
+
+<details>
+<summary><code>close_session</code> — permanently close a terminal session</summary>
+
+Kills the session's tmux session and its ttyd process. This cannot be undone (unlike
+navigating away in the browser, which leaves the session running in the background) —
+only call this when the session is genuinely done being useful.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "terminal_id": { "type": "string", "description": "The session id to close." }
+  },
+  "required": ["terminal_id"]
+}
+```
+
+Example call and response:
+```json
+// tools/call params: {"name":"close_session","arguments":{"terminal_id":"1a89eb36300d"}}
+{
+  "terminal_id": "1a89eb36300d",
+  "closed": true
 }
 ```
 </details>

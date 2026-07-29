@@ -52,17 +52,19 @@ async function runAndWaitForOutput(request, mcpSessionId, terminalId, text, outp
 }
 
 test.describe('MCP protocol', () => {
-  test('tools/list returns exactly the 7 documented tools with object schemas requiring terminal_id where expected', async ({ request, mcpSessionId }) => {
+  test('tools/list returns exactly the 10 documented tools with object schemas requiring terminal_id where expected', async ({ request, mcpSessionId }) => {
     const { messages } = await post(request, { sessionId: mcpSessionId, body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } });
     const tools = messages[0].result.tools;
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([
-      'get_process_status', 'get_screenshot', 'list_active_ports',
-      'read_terminal_contents', 'scroll_buffer', 'send_keystroke', 'type_command',
+      'close_session', 'create_session', 'get_process_status', 'get_screenshot',
+      'list_active_ports', 'list_sessions', 'read_terminal_contents', 'scroll_buffer',
+      'send_keystroke', 'type_command',
     ]);
+    const NO_TERMINAL_ID = new Set(['list_active_ports', 'list_sessions', 'create_session']);
     for (const t of tools) {
       expect(t.inputSchema.type).toBe('object');
-      if (t.name !== 'list_active_ports') {
+      if (!NO_TERMINAL_ID.has(t.name)) {
         expect(t.inputSchema.required).toContain('terminal_id');
       }
     }
@@ -321,5 +323,61 @@ test.describe('list_active_ports', () => {
   test('protocol defaults to "all" when omitted', async ({ request, mcpSessionId }) => {
     const result = await callToolExpectOk(request, mcpSessionId, 'list_active_ports', {});
     expect(result.protocol).toBe('all');
+  });
+});
+
+test.describe('session management (list_sessions, create_session, close_session)', () => {
+  test('create_session, list_sessions, and close_session cover the full lifecycle through MCP alone', async ({ request, mcpSessionId }) => {
+    const created = await callToolExpectOk(request, mcpSessionId, 'create_session', { label: 'mcp-lifecycle-test' });
+    expect(created.label).toBe('mcp-lifecycle-test');
+    expect(created.status).toBe('starting');
+    expect(created.terminal_id).toMatch(/^[a-f0-9]{12}$/);
+
+    const afterCreate = await callToolExpectOk(request, mcpSessionId, 'list_sessions', {});
+    expect(afterCreate.sessions.some((s) => s.terminal_id === created.terminal_id)).toBe(true);
+
+    // create_session returns as soon as the session is spawned, before ttyd has
+    // necessarily finished starting (status starts as "starting", not "running" --
+    // see server/session-manager.js's spawnSession). Wait for "running" before
+    // acting on it, the same race class fixed in the HTTP proxy path (see
+    // docs/ai/mistakes.md 2026-07-29-023).
+    await pollUntil(async () => {
+      const list = await callToolExpectOk(request, mcpSessionId, 'list_sessions', {});
+      const entry = list.sessions.find((s) => s.terminal_id === created.terminal_id);
+      return entry && entry.status === 'running' ? entry : null;
+    });
+
+    // Prove the session is real, not just a registry entry -- act on it via
+    // an existing tool exactly as an agent would after discovering it.
+    await runAndWaitForOutput(request, mcpSessionId, created.terminal_id, 'echo mcp_created_session_works', 'mcp_created_session_works');
+
+    const closed = await callToolExpectOk(request, mcpSessionId, 'close_session', { terminal_id: created.terminal_id });
+    expect(closed).toEqual({ terminal_id: created.terminal_id, closed: true });
+
+    const afterClose = await callToolExpectOk(request, mcpSessionId, 'list_sessions', {});
+    expect(afterClose.sessions.some((s) => s.terminal_id === created.terminal_id)).toBe(false);
+  });
+
+  test('create_session works with no label', async ({ request, mcpSessionId }) => {
+    const created = await callToolExpectOk(request, mcpSessionId, 'create_session', {});
+    expect(created.label).toBeTruthy(); // spawnSession() defaults it
+    await callToolExpectOk(request, mcpSessionId, 'close_session', { terminal_id: created.terminal_id });
+  });
+
+  test('close_session rejects an unknown terminal_id', async ({ request, mcpSessionId }) => {
+    const { result } = await callTool(request, mcpSessionId, 'close_session', { terminal_id: 'ffffffffffff' });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/No session found/);
+  });
+
+  test('close_session rejects a malformed terminal_id', async ({ request, mcpSessionId }) => {
+    const { result } = await callTool(request, mcpSessionId, 'close_session', { terminal_id: 'not-a-valid-id' });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/Invalid terminal_id/);
+  });
+
+  test('list_sessions reflects sessions created via the HTTP API too, not just via MCP', async ({ request, mcpSessionId, terminalId }) => {
+    const result = await callToolExpectOk(request, mcpSessionId, 'list_sessions', {});
+    expect(result.sessions.some((s) => s.terminal_id === terminalId)).toBe(true);
   });
 });

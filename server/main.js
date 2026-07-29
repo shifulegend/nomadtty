@@ -22,7 +22,12 @@ const sessionManager = require('./session-manager');
 const mcp = require('./mcp');
 
 const sessionManagerServer = sessionManager.start();
-const { httpServer: mcpServer, closeAll: closeMcpTransports } = mcp.start(sessionManager.sessions);
+const { httpServer: mcpServer, closeAll: closeMcpTransports } = mcp.start({
+  sessions: sessionManager.sessions,
+  spawnSession: sessionManager.spawnSession,
+  closeSession: sessionManager.closeSession,
+  listSessions: sessionManager.listSessions,
+});
 
 let shuttingDown = false;
 function shutdown() {

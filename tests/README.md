@@ -72,12 +72,13 @@ manual server startup is needed.
   reattaches to the same tmux session with scrollback intact, and updates
   the list's last-joined timestamp (asserting the actual rendered clock-time
   pattern, not just the absence of the placeholder "never joined" text).
-- `specs/mcp-tools.spec.js` — all 7 MCP tools over real HTTP (no browser):
+- `specs/mcp-tools.spec.js` — all 10 MCP tools over real HTTP (no browser):
   protocol basics (`tools/list`, bearer-token auth), `get_screenshot`,
   `read_terminal_contents` (`head`/`tail`/`full`/live-`follow` SSE
   streaming), `scroll_buffer`, `type_command`, `send_keystroke` (named +
-  hex, including a real Ctrl+C interrupt), `get_process_status`, and
-  `list_active_ports` — plus validation-error paths for each.
+  hex, including a real Ctrl+C interrupt), `get_process_status`,
+  `list_active_ports`, and session lifecycle (`list_sessions`,
+  `create_session`, `close_session`) — plus validation-error paths for each.
 - `specs/android-mobile-ux.spec.js` — mobile rendering/UX validated via
   Playwright's `devices['Pixel 7']` emulation (real viewport, `devicePixelRatio`,
   touch, mobile user-agent — see `docs/ai/decision-log.md` for why this is used

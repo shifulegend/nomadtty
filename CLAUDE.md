@@ -16,8 +16,10 @@ NomadTTY is a mobile-friendly web terminal, with two parallel deployment models 
 2. **Session Manager + MCP** (`server/**`): a Node backend running multiple named
    ttyd/tmux sessions behind a UI/API (`server/session-manager.js`), plus an MCP
    "Streamable HTTP" server (`server/mcp/**`) exposing those terminals to AI agents as
-   7 tools. Run via `npm install && node server/main.js` (not yet wired into
-   Dockerfile/install.sh/systemd).
+   10 tools. Run via `npm install && node server/main.js`. `systemd/nomadtty.service`
+   now exists and is what `terminal.pz.net` runs live (see docs/ai/decision-log.md's
+   2026-07-29 cutover entry) — `Dockerfile`/`install.sh` still describe the legacy
+   model only and are not yet wired to this architecture.
 
 ## Hard invariants (never violate without a decision-log entry)
 - `--writable` must be in every ttyd ExecStart/CMD. See mistakes.md [2026-06-20-001].

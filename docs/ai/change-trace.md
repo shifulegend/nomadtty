@@ -17,6 +17,34 @@
 
 ---
 
+### [2026-07-29] Added list_sessions/create_session/close_session MCP tools
+- **Timestamp**: 2026-07-29 16:00-16:15 UTC
+- **Change**: Added 3 new MCP tools wired to `server/session-manager.js`'s existing
+  `spawnSession`/`closeSession`/`listSessions` functions. New validators
+  `requireTerminalIdFormat` and `requireLabel` in `server/mcp/validation.js` (new env
+  var `MCP_MAX_LABEL_BYTES`, default 256). Threaded the 3 functions through
+  `server/mcp/index.js` (`createMcpServer`/`createMcpRequestHandler`/`start`) and the
+  call site in `server/main.js`. Restarted the live `nomadtty.service` to deploy.
+- **Rationale**: See `docs/ai/decision-log.md`'s matching 2026-07-29 entry.
+- **Affected areas**: `server/mcp/tools.js`, `server/mcp/validation.js`,
+  `server/mcp/index.js`, `server/main.js`, `.claude/rules/config.md`,
+  `docs/ai/engineering-rules.md`, `tests/specs/mcp-tools.spec.js`, `README.md`,
+  `CLAUDE.md`, `.claude/rules/tests.md`, `.claude/rules/infra.md`,
+  `docs/ai/project-overview.md` (the latter three also corrected a stale claim that
+  `systemd` didn't run this architecture yet -- it does, as of the cutover earlier
+  today).
+- **Verification**: `tools/list` on the live server confirms all 10 tools register with
+  the expected schemas (diffed directly, used verbatim in the README updates rather than
+  hand-written). Full live lifecycle test via curl: `create_session` (status
+  `"starting"`) -> `list_sessions` shows it (status `"running"` ~1s later) ->
+  `type_command` + `get_screenshot` confirm the session is a real, working terminal ->
+  `close_session` -> `list_sessions` confirms it's gone -> `close_session` on a bogus id
+  returns a clean `isError` result. 5 new Playwright tests added to
+  `tests/specs/mcp-tools.spec.js` covering the same ground plus validation-error paths;
+  full suite re-run to confirm no regressions.
+- **Related decisions**: `docs/ai/decision-log.md` [2026-07-29] "Added session-lifecycle
+  MCP tools..."
+
 ### [2026-07-29] Fixed ttyd-startup race in the reverse proxy (Upstream error on new sessions)
 - **Timestamp**: 2026-07-29 15:35-15:45 UTC
 - **Change**: Added a bounded retry-with-delay (`UPSTREAM_RETRY_MAX=20`, `UPSTREAM_RETRY_DELAY_MS=100`) in `server/session-manager.js`'s `proxyHttp()`, scoped to `GET` requests failing with `ECONNREFUSED`. Restarted the live `nomadtty.service` to deploy it.

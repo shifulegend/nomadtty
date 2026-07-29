@@ -14,8 +14,8 @@
 const { z } = require('zod');
 const tmux = require('./tmux');
 const {
-  ToolInputError, requireTerminalId, requireText, findDenylistMatch,
-  requireNamedKeys, requireHexKeys, requireLineCount, MAX_FULL_CAPTURE_LINES,
+  ToolInputError, requireTerminalId, requireTerminalIdFormat, requireText, requireLabel,
+  findDenylistMatch, requireNamedKeys, requireHexKeys, requireLineCount, MAX_FULL_CAPTURE_LINES,
 } = require('./validation');
 
 const FOLLOW_MAX_SECONDS = parseInt(process.env.MCP_FOLLOW_MAX_SECONDS || '30', 10);
@@ -49,7 +49,7 @@ function guarded(handler) {
 // current scroll position" outside of interactive copy-mode.
 const scrollOffsets = new Map();
 
-function registerTools(server, { sessions }) {
+function registerTools(server, { sessions, spawnSession, closeSession, listSessions }) {
   server.registerTool(
     'get_screenshot',
     {
@@ -263,6 +263,65 @@ function registerTools(server, { sessions }) {
     guarded(async ({ protocol }) => {
       const ports = tmux.listeningSockets({ protocol });
       return textResult({ protocol, count: ports.length, ports });
+    })
+  );
+
+  server.registerTool(
+    'list_sessions',
+    {
+      title: 'List terminal sessions',
+      description:
+        'Lists every currently open NomadTTY terminal session (the same registry the Session Manager ' +
+        'UI shows), with its terminal_id, label, status, and timestamps — use this to discover existing ' +
+        'sessions before acting on one, since every other tool requires a terminal_id.',
+      inputSchema: {},
+    },
+    guarded(async () => {
+      const sessionList = listSessions().map((s) => ({
+        terminal_id: s.id, label: s.label, status: s.status,
+        created_at: s.createdAt, last_joined_at: s.lastJoinedAt,
+      }));
+      return textResult({ sessions: sessionList, count: sessionList.length });
+    })
+  );
+
+  server.registerTool(
+    'create_session',
+    {
+      title: 'Create a new terminal session',
+      description:
+        'Opens a new NomadTTY terminal session (a fresh ttyd+tmux pair) and returns its terminal_id, ' +
+        'which every other tool needs to act on it. Optionally give it a human-readable label (shown in ' +
+        'the Session Manager UI too). The session persists — via tmux — until explicitly closed with ' +
+        'close_session.',
+      inputSchema: {
+        label: z.string().optional().describe('Optional human-readable name for the session.'),
+      },
+    },
+    guarded(async ({ label }) => {
+      requireLabel(label);
+      const entry = spawnSession(label);
+      return textResult({ terminal_id: entry.id, label: entry.label, status: entry.status });
+    })
+  );
+
+  server.registerTool(
+    'close_session',
+    {
+      title: 'Close a terminal session',
+      description:
+        'Permanently closes a NomadTTY terminal session: kills its tmux session and its ttyd process. ' +
+        'This cannot be undone (unlike navigating away, which leaves the session running in the ' +
+        'background) — only call this when the session is genuinely done being useful.',
+      inputSchema: {
+        terminal_id: z.string().describe('The session id to close.'),
+      },
+    },
+    guarded(async ({ terminal_id }) => {
+      requireTerminalIdFormat(terminal_id);
+      const closed = closeSession(terminal_id);
+      if (!closed) throw new ToolInputError(`No session found for terminal_id "${terminal_id}".`);
+      return textResult({ terminal_id, closed: true });
     })
   );
 }

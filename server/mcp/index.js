@@ -34,12 +34,12 @@ const { registerTools } = require('./tools');
 const MCP_PORT = parseInt(process.env.MCP_PORT || '4200', 10);
 const MCP_HOST = process.env.MCP_HOST || '0.0.0.0';
 
-function createMcpServer(sessions) {
+function createMcpServer({ sessions, spawnSession, closeSession, listSessions }) {
   const server = new McpServer(
     { name: 'nomadtty', version: require('../../package.json').version },
     { capabilities: { tools: {}, logging: {} } }
   );
-  registerTools(server, { sessions });
+  registerTools(server, { sessions, spawnSession, closeSession, listSessions });
   return server;
 }
 
@@ -80,8 +80,12 @@ function sendJsonRpcError(res, status, code, message, id = null) {
  * Builds the /mcp request handler. `sessions` is the live registry from
  * server/session-manager.js (a Map<terminal_id, entry>) — tools read it
  * directly, so they always see whatever sessions currently exist.
+ * `spawnSession`/`closeSession`/`listSessions` are that same module's
+ * lifecycle functions, threaded through so the session-management tools
+ * (list_sessions/create_session/close_session) can drive real sessions
+ * the same way the Session Manager's own HTTP API does.
  */
-function createMcpRequestHandler({ sessions }) {
+function createMcpRequestHandler({ sessions, spawnSession, closeSession, listSessions }) {
   const transports = new Map();
 
   async function handlePost(req, res) {
@@ -105,7 +109,7 @@ function createMcpRequestHandler({ sessions }) {
         transport.onclose = () => {
           if (transport.sessionId) transports.delete(transport.sessionId);
         };
-        const mcpServer = createMcpServer(sessions);
+        const mcpServer = createMcpServer({ sessions, spawnSession, closeSession, listSessions });
         await mcpServer.connect(transport);
         return await transport.handleRequest(req, res, body);
       }
@@ -146,9 +150,9 @@ function createMcpRequestHandler({ sessions }) {
   return { requestListener, closeAll, transportCount: () => transports.size };
 }
 
-function start(sessions) {
+function start({ sessions, spawnSession, closeSession, listSessions }) {
   auth.assertBootSecurityPolicy(MCP_HOST);
-  const { requestListener, closeAll } = createMcpRequestHandler({ sessions });
+  const { requestListener, closeAll } = createMcpRequestHandler({ sessions, spawnSession, closeSession, listSessions });
 
   const httpServer = http.createServer((req, res) => {
     if (new URL(req.url, 'http://localhost').pathname !== '/mcp') {

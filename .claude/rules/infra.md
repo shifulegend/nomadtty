@@ -3,12 +3,15 @@
 <!-- covers: Dockerfile, nginx, systemd, install.sh, server/main.js -->
 <!-- last updated: 2026-07-29 -->
 
-## Known gap: Session Manager + MCP server are not in Dockerfile/install.sh/systemd
-`Dockerfile`, `install.sh`, `docker-entrypoint.sh`, and `systemd/ttyd.service` all still
-describe the legacy single-ttyd model only. `server/session-manager.js` and
-`server/mcp/**` must currently be run manually (`npm install && node server/main.js`).
-Do not assume they're deployed just because the legacy files look complete — check
-`docs/ai/project-overview.md`'s current-state note before touching deployment infra.
+## Known gap: Session Manager + MCP server are not in Dockerfile/install.sh
+`Dockerfile`, `install.sh`, and `docker-entrypoint.sh` all still describe the legacy
+single-ttyd model only. `systemd/nomadtty.service` (added 2026-07-29) now exists and is
+what runs the Session Manager + MCP backend (`server/main.js`) on the live
+`terminal.pz.net` host — see `docs/ai/decision-log.md`'s 2026-07-29 cutover entry — but
+that unit is not (yet) installed by `install.sh`, and there is no Dockerfile equivalent.
+Do not assume the Docker/`install.sh` deployment paths run this architecture just
+because a live host does — check `docs/ai/project-overview.md`'s current-state note
+before touching deployment infra.
 
 ## Dockerfile rules
 - Base: `ubuntu:24.04`. Do not switch to alpine without testing ttyd availability.

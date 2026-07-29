@@ -15,6 +15,43 @@
 
 ---
 
+### [2026-07-29] Added session-lifecycle MCP tools (list_sessions/create_session/close_session)
+- **Context**: While verifying the terminal.pz.net cutover (see the entry immediately
+  below), the user asked whether an AI agent could list, create, or close NomadTTY
+  sessions via MCP. It could not: all 7 existing tools require an already-known
+  `terminal_id`, and session lifecycle only existed on the Session Manager's own HTTP
+  API (`/api/sessions`), which is loopback-only and unreachable from where the MCP
+  server is deliberately exposed (LAN + Tailscale, per the same cutover's explicit
+  request for cross-device agent access).
+- **Decision**: Added 3 tools wired directly to `server/session-manager.js`'s existing
+  `spawnSession`/`closeSession`/`listSessions` functions (no new tmux/process logic —
+  reused what the HTTP API already uses). Threaded these three functions through
+  `server/mcp/index.js` and `server/main.js` the same explicit-dependency-passing way
+  `sessions` (the registry Map) already was, rather than having `tools.js` `require()`
+  `session-manager.js` directly. Added two new validators to `validation.js`:
+  `requireTerminalIdFormat` (format-only, since `close_session` must be able to close a
+  session in any status, not just `'running'`) and `requireLabel` (optional-aware, new
+  `MCP_MAX_LABEL_BYTES` env var, default 256).
+- **Alternatives considered**: Widening the Session Manager's own HTTP API to also bind
+  LAN/Tailscale-facing (rejected — its docstring explicitly notes it has no auth of its
+  own, and this was the exact thing keeping it and the MCP server on separate listeners
+  in the first place). Having `tools.js` `require('../session-manager')` directly
+  instead of threading functions through `index.js`/`main.js` (rejected for consistency
+  with the existing `sessions` Map's explicit-passing pattern, even though slightly more
+  verbose).
+- **Rationale**: No new security boundary needed — the MCP bearer-token auth already
+  gates the entire `/mcp` endpoint uniformly, and any authenticated caller can already
+  run arbitrary shell commands via `type_command`; letting the same caller also
+  list/create/close sessions is not a larger blast radius than what's already granted.
+- **Consequences**: MCP tool count is now 10 (was 7); test suite grew from 55 to 60
+  tests. `create_session` returns while the session's `status` is still `"starting"`
+  (matches `spawnSession`'s existing behavior) — callers that immediately act on the new
+  session should poll `list_sessions` for `"running"` first, the same race class as
+  `docs/ai/mistakes.md` [2026-07-29-023], just in the MCP path instead of the HTTP proxy
+  path; the test added for this polls correctly, but this is worth remembering for any
+  future MCP client code.
+- **Owner**: User (explicit request), implemented via an approved plan.
+
 ### [2026-07-29] terminal.pz.net cut over from the legacy single-ttyd model to Session Manager + MCP, live
 - **Context**: Repo history had drifted into 6 unmerged remote branches (a full architecture
   rewrite plus 4 dependabot bumps) that were never fetched locally. User asked to merge

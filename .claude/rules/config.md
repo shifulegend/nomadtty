@@ -19,6 +19,7 @@
 | `MCP_AUTH_TOKEN` | *(none)* | `server/mcp/auth.js` — required once `MCP_HOST` is non-loopback |
 | `MCP_ALLOW_INSECURE` | *(unset)* | `server/mcp/auth.js` — explicit opt-out of the token requirement; never use in production |
 | `MCP_MAX_TEXT_BYTES` | `8192` | `server/mcp/validation.js` — `type_command` text size cap |
+| `MCP_MAX_LABEL_BYTES` | `256` | `server/mcp/validation.js` — `create_session` label size cap |
 | `MCP_MAX_KEYS_PER_CALL` | `32` | `server/mcp/validation.js` — `send_keystroke` array size cap |
 | `MCP_MAX_LINES_REQUEST` | `5000` | `server/mcp/validation.js` — `read_terminal_contents` head/tail line cap |
 | `MCP_MAX_CAPTURE_LINES` | `5000` | `server/mcp/validation.js` — `mode="full"` truncation threshold |

@@ -13,15 +13,19 @@ Context Protocol** (see "Session Manager + MCP server architecture" below).
 This repo currently contains **two parallel deployment models** that have not yet
 been unified:
 1. **Legacy single-terminal model** — `Dockerfile`, `install.sh`,
-   `systemd/ttyd.service`, `docker-entrypoint.sh`, `nginx/ttyd.conf`. One ttyd
-   process + nginx `sub_filter` injection, exactly as described below. This is
-   what actually ships today via Docker/`install.sh`.
+   `docker-entrypoint.sh`, `nginx/ttyd.conf`. One ttyd process + nginx `sub_filter`
+   injection, exactly as described below. This is what ships today via Docker/
+   `install.sh`, but it is **no longer what `terminal.pz.net` itself runs** (see below).
 2. **Session Manager + MCP model** — `server/session-manager.js`,
-   `server/mcp/**`, `server/main.js`, `public/session-manager.*`. A Node process
-   that can run multiple named ttyd/tmux sessions and exposes them to MCP
-   agents. This is real, working code (see below), but **Dockerfile/install.sh/
-   systemd do not start it** — it must currently be run manually
-   (`npm install && node server/main.js`). TODO: unify the deployment story.
+   `server/mcp/**`, `server/main.js`, `public/session-manager.*`, `systemd/nomadtty.service`.
+   A Node process that can run multiple named ttyd/tmux sessions and exposes them to
+   MCP agents (10 tools, including session lifecycle: `list_sessions`/`create_session`/
+   `close_session`). As of 2026-07-29 this is what the live `terminal.pz.net` host
+   actually runs, via `systemd/nomadtty.service` (see `docs/ai/decision-log.md`'s
+   2026-07-29 cutover entry) — the old `ttyd.service` was disabled. **Dockerfile/
+   install.sh still do not start it** — those paths still ship the legacy model only.
+   TODO: unify the deployment story so a fresh install via Docker/`install.sh` also
+   gets this architecture.
 
 ## Stack and Key Dependencies
 

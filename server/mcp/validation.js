@@ -28,6 +28,7 @@ const NAMED_KEY_RE = /^(?:C-|M-|S-)*(?:F(?:[1-9]|1[0-2])|[A-Za-z0-9]|Enter|Escap
 const HEX_BYTE_RE = /^[0-9a-fA-F]{2}$/;
 
 const MAX_TEXT_BYTES = parseInt(process.env.MCP_MAX_TEXT_BYTES || '8192', 10);
+const MAX_LABEL_BYTES = parseInt(process.env.MCP_MAX_LABEL_BYTES || '256', 10);
 const MAX_KEYS_PER_CALL = parseInt(process.env.MCP_MAX_KEYS_PER_CALL || '32', 10);
 const MAX_LINES_REQUEST = parseInt(process.env.MCP_MAX_LINES_REQUEST || '5000', 10);
 const MAX_FULL_CAPTURE_LINES = parseInt(process.env.MCP_MAX_CAPTURE_LINES || '5000', 10);
@@ -62,6 +63,34 @@ function requireTerminalId(sessions, terminalId) {
     throw new ToolInputError(`Session "${terminalId}" is not running (status: ${entry.status}).`);
   }
   return entry;
+}
+
+/** Format-only terminal_id check -- unlike requireTerminalId, does not require
+ * the session to exist or be 'running'. close_session needs to be able to
+ * close a session in any status (e.g. stuck in 'starting'). */
+function requireTerminalIdFormat(terminalId) {
+  if (typeof terminalId !== 'string' || !TERMINAL_ID_RE.test(terminalId)) {
+    throw new ToolInputError(`Invalid terminal_id: expected a 12-character hex session id.`);
+  }
+  return terminalId;
+}
+
+/** Like requireText, but optional-aware: create_session's label is optional
+ * (spawnSession() already defaults it when omitted), so undefined passes
+ * through untouched rather than being rejected as empty. */
+function requireLabel(label) {
+  if (label === undefined) return undefined;
+  if (typeof label !== 'string' || label.length === 0) {
+    throw new ToolInputError('label must be a non-empty string when provided.');
+  }
+  if (label.indexOf('\u0000') !== -1) {
+    throw new ToolInputError('label must not contain NUL bytes.');
+  }
+  const byteLength = Buffer.byteLength(label, 'utf8');
+  if (byteLength > MAX_LABEL_BYTES) {
+    throw new ToolInputError(`label is ${byteLength} bytes, exceeding the ${MAX_LABEL_BYTES}-byte limit (MCP_MAX_LABEL_BYTES).`);
+  }
+  return label;
 }
 
 function requireText(text, { fieldName = 'text' } = {}) {
@@ -129,8 +158,8 @@ function requireLineCount(lines, { fieldName = 'lines' } = {}) {
 
 module.exports = {
   TERMINAL_ID_RE, NAMED_KEY_RE, HEX_BYTE_RE,
-  MAX_TEXT_BYTES, MAX_KEYS_PER_CALL, MAX_LINES_REQUEST, MAX_FULL_CAPTURE_LINES,
+  MAX_TEXT_BYTES, MAX_LABEL_BYTES, MAX_KEYS_PER_CALL, MAX_LINES_REQUEST, MAX_FULL_CAPTURE_LINES,
   ToolInputError,
-  requireTerminalId, requireText, findDenylistMatch,
+  requireTerminalId, requireTerminalIdFormat, requireText, requireLabel, findDenylistMatch,
   requireNamedKeys, requireHexKeys, requireLineCount,
 };
