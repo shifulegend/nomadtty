@@ -15,6 +15,43 @@
 
 ---
 
+### [2026-07-30] install.sh persists its own settings in /etc/nomadtty/nomadtty.env, not just MCP_AUTH_TOKEN
+- **Context**: The competitive-analysis backlog's item 12 flagged NomadTTY's two
+  historically-disjoint config surfaces. Investigating what "unify" should concretely mean
+  now that there's one deployment model (see the entry above this one's sibling from
+  earlier today), the real remaining gap was operational, not architectural: `install.sh`
+  already persisted `MCP_AUTH_TOKEN` across re-runs, but every *other* setting
+  (`NOMADTTY_HOST`, `NOMADTTY_USER`, `NOMADTTY_TLS`, `NOMADTTY_TLS_EMAIL`,
+  `NOMADTTY_BASIC_AUTH`) silently reset to its default the moment an operator ran
+  `sudo bash install.sh` again without re-supplying the exact same env vars — e.g. a bare
+  upgrade re-run could silently disable a previously-configured Basic Auth layer.
+- **Decision**: `install.sh` now reads `/etc/nomadtty/nomadtty.env` at the very top (via a
+  small `_stored()` helper) and uses any previously-written value for those five settings
+  as the fallback default — an explicitly-passed env var this run still takes priority.
+  All five are now also written into `nomadtty.env` on every run (previously only
+  `MCP_AUTH_TOKEN`/`MCP_PORT`/`MCP_HOST`/`SESSION_MANAGER_PORT` were).
+- **Alternatives considered**: A second, separate "install state" file distinct from the
+  `server/**`-runtime env file — rejected as unnecessary complexity; `nomadtty.env` is
+  already install.sh's own generated, `chmod 600` artifact, and Node simply ignores the
+  extra keys it doesn't read, so one file serving both purposes is simpler to reason about
+  than two files that must stay in sync.
+- **Rationale**: A real config-file model's defining property is that it's the durable
+  record an operator doesn't have to keep re-supplying — this makes `install.sh` behave
+  that way in practice, not just on paper.
+- **Consequences**: Re-running `install.sh` with no env vars now repeats the previous
+  install exactly, including Basic Auth/TLS/host settings — verified in a disposable
+  container (custom `NOMADTTY_HOST`+`NOMADTTY_BASIC_AUTH` set on run 1, zero settings
+  passed on run 2, nginx config regenerated identically both times). Discovered and fixed
+  a real, previously-latent bug during this verification: the health check's own
+  `curl`-into-`set -e` pattern could silently abort the script before printing its own
+  diagnostic output — see `docs/ai/mistakes.md` 2026-07-30-003 (this predates today's other
+  changes; it was only surfaced now because verifying idempotency required running the
+  script against a container with no backend actually listening yet).
+- **Owner**: claude (session doing a "no compromise" pass on the competitive-analysis
+  backlog, per explicit user direction).
+
+---
+
 ### [2026-07-30] install.sh gets opt-in TLS (Certbot) and Basic Auth; default rate limiting moves into nginx/ttyd.conf itself
 - **Context**: The competitive-analysis backlog (`docs/competitive-analysis.md`) flagged
   several SECURITY.md-recommended hardening items ("Enable HTTPS", "Add nginx auth_basic

@@ -12,6 +12,7 @@ docs/assets/_videos/
 docs/assets/_videos_*/
 docs/assets/_palette*.png
 
-# Local secrets
+# Local secrets (.env.example is tracked and safe — it has no real values)
+.env
 .env.local
 .env.secrets

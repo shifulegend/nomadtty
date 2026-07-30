@@ -5,6 +5,47 @@
 
 ---
 
+### [2026-07-30-003] install.sh's own health check could silently abort the script under `set -e`, skipping its own diagnostic output
+- **Timestamp**: 2026-07-30 UTC
+- **Summary**: While verifying `install.sh`'s new config-persistence feature (re-running
+  with no env vars should repeat a previous custom install) in a test container with no
+  real nginx/backend actually running, the script exited early with no summary output at
+  all, right after printing `"==> Verifying deployment..."` — silently, with no
+  `WARNING`/troubleshooting lines and no final summary/uninstall-instructions block ever
+  printed, even though those exist specifically to help when something's wrong.
+- **Root cause**: `HTTP_STATUS="$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1/")"`
+  is a bare command-substitution assignment. Under `set -e`, if the command inside `$()`
+  exits non-zero (curl's own "connection refused"/"couldn't connect" exit code, e.g. `7`),
+  bash treats the *assignment statement itself* as having failed and exits the script
+  immediately — before the very next line even checks `$HTTP_STATUS`. This is a genuine,
+  easy-to-miss `set -e` gotcha (unlike `x=$(false) && true`, a bare `x=$(false)` on its own
+  line does trip `set -e`), and it predates this session's other `install.sh` changes — the
+  original health check had the exact same construct.
+- **Affected files**: `install.sh` (the health-check block).
+- **Detection method**: Ran the real script end-to-end in a container where nginx/the
+  backend were deliberately not started (only their config was being verified), rather
+  than only testing the happy path where a prior manual `nginx -g 'daemon off;'` + `node
+  server/main.js` was already running in the background. The silent, summary-less exit
+  was the tell — a passing health check should print `HTTP 200 OK`, a failing one should
+  print `WARNING: Got HTTP ...`, but nothing printed at all.
+- **Correction**: `|| true` appended to both health-check curl invocations (the plain one
+  and the `-u user:pass` Basic-Auth variant), so a connection failure can never abort the
+  assignment. Deliberately not `|| echo "000"`: curl's own `-w "%{http_code}"` already
+  prints `"000"` on its own when no response code was received, so an additional literal
+  would double up into `"000000"` — caught by testing the actual printed value, not just
+  checking the exit code was now 0.
+- **Prevention rule**: Any `VAR="$(cmd)"` whose whole purpose is to *observe and report* an
+  external condition (a health check, an optional/best-effort probe) — as opposed to a
+  step whose failure should legitimately abort the script — needs `|| true` (or equivalent)
+  under `set -e`, since a bare failed command substitution assignment aborts silently,
+  before the reporting logic that was the entire point ever runs. When adding such a
+  fallback, verify the *actual value* produced on the failure path (not just that the
+  script no longer exits early) — a tool's own error-signaling convention (like curl's
+  `"000"`) can silently combine with a naively-added fallback into a wrong-but-still-truthy
+  result.
+
+---
+
 ### [2026-07-30-002] install.sh's Basic Auth htpasswd file was unreadable by nginx's worker process (every request 500'd)
 - **Timestamp**: 2026-07-30 UTC
 - **Summary**: Implementing `install.sh`'s new `NOMADTTY_BASIC_AUTH` option, the htpasswd

@@ -3,6 +3,33 @@
 <!-- last updated: 2026-07-30 -->
 <!-- add an entry for every notable change: what, why, affected areas, commit -->
 
+### [2026-07-30] install.sh persists all its settings across re-runs; fixed a health-check set -e bug; added .env.example
+- **Timestamp**: 2026-07-30 UTC
+- **Change**: `install.sh` now reads `/etc/nomadtty/nomadtty.env` first and falls back to
+  any previously-stored `NOMADTTY_HOST`/`NOMADTTY_USER`/`NOMADTTY_TLS`/
+  `NOMADTTY_TLS_EMAIL`/`NOMADTTY_BASIC_AUTH` value (an explicitly-passed env var this run
+  still wins), and persists all five into that file on every run — previously only
+  `MCP_AUTH_TOKEN` survived a bare re-run. Fixed a real bug found during verification: the
+  health check's `curl` call could silently abort the whole script under `set -e` before
+  ever printing its own diagnostic/summary output (`|| true` fix — see mistakes.md
+  2026-07-30-003). Added `.env.example` at the repo root documenting every `server/**`
+  runtime env var for the `node server/main.js`-direct dev path, linked from README and
+  `.claude/rules/config.md`; added `.env`/`.env.example` handling to `.gitignore`.
+- **Rationale**: Closes the competitive-analysis backlog's "unify configuration surface"
+  item — a real config surface's defining property is that it's a durable record, not a
+  set of flags that must be identically re-supplied on every invocation.
+- **Affected areas**: `install.sh`, `.env.example` (new), `.gitignore`, `README.md`,
+  `.claude/rules/config.md`.
+- **Related decisions**: `docs/ai/decision-log.md`'s 2026-07-30 "install.sh persists its
+  own settings..." entry.
+- **Related mistakes**: `docs/ai/mistakes.md` 2026-07-30-003.
+- **Verification**: `shellcheck install.sh` passes. In a disposable container: ran
+  install.sh with a custom `NOMADTTY_HOST` + `NOMADTTY_BASIC_AUTH`, then re-ran with zero
+  config env vars — confirmed the summary output, the regenerated nginx config
+  (`server_name`/`auth_basic` directives), and the persisted `nomadtty.env` all matched
+  the original configuration. Confirmed the `curl`/`set -e` fix produces a clean `"000"`
+  (not a doubled `"000000"`) on a real connection failure.
+
 ### [2026-07-30] Added --help/--version to install.sh and server/main.js; added CHANGELOG.md; small Session Manager UI copy/tooltip improvements
 - **Timestamp**: 2026-07-30 UTC
 - **Change**: `install.sh -h|--help|--version` now prints usage/version and exits before
