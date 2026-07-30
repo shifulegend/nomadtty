@@ -260,7 +260,7 @@ sudo systemctl enable --now nomadtty
 
 ```mermaid
 graph LR
-    Client["📱 Client\nPhone / Tablet / Desktop\nTailscale network"]
+    Client["📱 Client\nPhone / Tablet / Desktop\nLAN, Tailscale, or local"]
     Agent["🤖 AI agent\n(MCP client)"]
 
     subgraph server ["Linux server — one nomadtty systemd service / container"]
@@ -932,14 +932,17 @@ NomadTTY is designed for **private network deployment**, not public internet exp
 |-------|-----------|
 | **ttyd isolation** | Every per-session ttyd process binds `127.0.0.1` only — unreachable from outside the server |
 | **nginx as gateway** | The only public-facing process for the terminal UI; enforces TLS, rate limits, auth |
-| **No built-in auth on the Session Manager UI** | Your responsibility — Tailscale VPN is the recommended approach |
+| **No built-in auth on the Session Manager UI** | Your responsibility — Tailscale/VPN, a trusted LAN, `NOMADTTY_BASIC_AUTH`, or purely local hosting are all valid; see below |
 | **MCP bearer-token auth** | Required for any non-loopback MCP bind — see [Security model](#security-model) |
 | **Non-root service** | Configurable via `NOMADTTY_USER`; not root by default |
 | **Dependabot scanning** | Automated CVE checks on Docker base and GitHub Actions pins |
 
-**Recommended deployment:** put NomadTTY behind [Tailscale](https://tailscale.com) so
-the terminal is never reachable from the public internet. Tailscale Serve adds
-automatic HTTPS on your `ts.net` domain.
+**Tailscale is optional, not compulsory.** It's a good fit if you want remote access
+without ever exposing NomadTTY to the public internet — see the Tailscale Setup section
+below. It isn't the only valid choice: running on a trusted LAN (nothing beyond your
+own router/firewall), or purely local hosting (nginx bound to `127.0.0.1` only, no
+network exposure at all), are equally legitimate setups. Add `NOMADTTY_BASIC_AUTH` on
+top of whichever you pick if more than one person can reach that network segment.
 
 See [SECURITY.md](SECURITY.md) for the full hardening checklist and vulnerability
 disclosure process.
@@ -970,7 +973,9 @@ disclosure process.
 
 ## Tailscale Setup
 
-To expose NomadTTY only on your Tailscale network (no public internet):
+Optional — skip this section entirely if you're running on a trusted LAN or hosting
+purely locally; nothing else in this project requires Tailscale. Use it if you want to
+reach NomadTTY remotely without ever exposing it to the public internet:
 
 ```bash
 # Option 1: Tailscale Serve — automatic HTTPS on your ts.net domain
