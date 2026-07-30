@@ -123,15 +123,36 @@ function captureViewport(tmuxName, { ansi = false, offsetFromBottom = 0 } = {}) 
 /**
  * True if the pane is currently in tmux copy-mode -- i.e. a client (the
  * browser's "Hist" toggle, see server/session-manager.js) has frozen the
- * live view to page through scrollback.
+ * live view to page through scrollback. This always asks tmux directly
+ * (not the in-memory tracking below) -- used only from the low-frequency
+ * copy-mode-driving path itself, never from the send* hot path.
  */
 function isInCopyMode(tmuxName) {
   return tmuxBounded(['display-message', '-p', '-t', tmuxName, '-F', '#{pane_in_mode}']).trim() === '1';
 }
 
+/* In-memory mirror of "did OUR code put this pane in copy-mode", checked by
+ * exitCopyModeIfActive() below before paying for a real `tmux
+ * display-message` round trip. Measured: adding the unconditional real
+ * check to every MCP send call roughly doubled its latency (3.4ms -> 7.7ms
+ * per call on a 2-core Colab VM), enough to push some send-heavy tests
+ * (many sequential type_command/send_keystroke calls) over their existing
+ * timeout budgets -- a real, measured regression, not a correctness one.
+ * Set/cleared only by enterCopyMode/exitCopyModeIfActive/scrollCopyMode
+ * below, i.e. only by this app's own copy-mode control surface (kb.js's
+ * "Hist" toggle). A pane put into copy-mode through some OTHER path
+ * (manual tmux commands over direct shell access, not through this app at
+ * all) would not be reflected here -- accepted: this project's own
+ * threat model already treats "has direct shell access" as equivalent to
+ * "already has full control," so this narrows an already-out-of-scope edge
+ * case rather than reopening the interference bug for any path this app
+ * actually exposes. */
+const knownCopyModePanes = new Set();
+
 /** Enters copy-mode without moving the view. */
 function enterCopyMode(tmuxName) {
   tmuxBounded(['copy-mode', '-t', tmuxName]);
+  knownCopyModePanes.add(tmuxName);
 }
 
 /**
@@ -148,15 +169,27 @@ function enterCopyMode(tmuxName) {
  * a concurrent human mid-scroll (see docs/ai/decision-log.md), which is
  * also the more useful behavior: the human sees the agent's new output
  * immediately rather than staying stuck on a stale scrolled-back view.
+ * Checks the in-memory set first (near-zero cost) and only pays for a real
+ * tmux round trip when it says copy-mode might actually be active.
  */
 function exitCopyModeIfActive(tmuxName) {
+  if (!knownCopyModePanes.has(tmuxName)) return;
   if (isInCopyMode(tmuxName)) tmuxBounded(['send-keys', '-X', '-t', tmuxName, 'cancel']);
+  knownCopyModePanes.delete(tmuxName);
 }
 
 /** Pages the copy-mode view by `lines` rows, entering copy-mode first if needed. */
 function scrollCopyMode(tmuxName, direction, lines) {
-  if (!isInCopyMode(tmuxName)) enterCopyMode(tmuxName);
+  if (!knownCopyModePanes.has(tmuxName)) enterCopyMode(tmuxName);
   tmuxBounded(['send-keys', '-X', '-t', tmuxName, '-N', String(lines), direction === 'up' ? 'scroll-up' : 'scroll-down']);
+}
+
+/** Drops a closed session's entry from the in-memory copy-mode set, called
+ * by session-manager.js's closeSession() -- otherwise a tmuxName that was
+ * ever scrolled would sit in the Set forever, since kill-session ends the
+ * pane without ever going through exitCopyModeIfActive(). */
+function forgetPane(tmuxName) {
+  knownCopyModePanes.delete(tmuxName);
 }
 
 /** Injects literal text as if typed, with no key-name interpretation. */
@@ -252,5 +285,5 @@ module.exports = {
   paneExists, getPaneInfo, capturePane, captureFull, captureHead, captureTail,
   captureViewport, sendLiteral, sendEnter, sendNamedKeys, sendHexKeys,
   processTree, listeningSockets,
-  isInCopyMode, enterCopyMode, exitCopyModeIfActive, scrollCopyMode,
+  isInCopyMode, enterCopyMode, exitCopyModeIfActive, scrollCopyMode, forgetPane,
 };

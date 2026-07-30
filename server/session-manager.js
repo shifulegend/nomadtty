@@ -155,6 +155,7 @@ function closeSession(id) {
   try {
     execFileSync('tmux', ['kill-session', '-t', entry.tmuxName], { stdio: 'ignore' });
   } catch (e) { /* session may already be gone; not fatal */ }
+  tmuxLib.forgetPane(entry.tmuxName);
 
   /* 2. SIGTERM the ttyd process, escalate to SIGKILL if it doesn't
      exit within 3s. Prevents zombie processes / leaked file descriptors. */
