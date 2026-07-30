@@ -181,46 +181,45 @@ that gap either.
 
 ## G — Prioritized backlog of recommended changes
 
-Backlog only — nothing below has been implemented in this session.
+**Status update (2026-07-30):** following an explicit "no compromise, implement
+everything" follow-up request, every item below except #10 (declined by the operator)
+has since been implemented and verified — see `docs/ai/decision-log.md` and
+`docs/ai/change-trace.md` for the full record of each change, including two real,
+previously-latent bugs found and fixed along the way (a live `502 Bad Gateway` on the
+shipped Docker/install.sh paths, and an incorrect long-standing claim that Alpine lacks
+a ttyd package).
 
 ### Install / deployment unification (highest impact)
-1. **Give the Session Manager + MCP path an actual installer** — at minimum
-   a `docker run`/compose one-liner or an `install.sh`-equivalent that runs
-   `npm install`, generates `MCP_AUTH_TOKEN`, and starts `server/main.js` —
-   closing the single biggest gap versus every comparator surveyed.
-2. **Template and install the `systemd/nomadtty.service` unit** the same way
-   `install.sh` already templates `systemd/ttyd.service` (parameterized
-   paths/user), instead of requiring hand-editing for each host.
-3. **Reconcile the two deployment models long-term** so a fresh install
-   yields the full, currently-recommended feature set (mobile toolbar +
-   multi-session + MCP) via one path — the two-model split is itself the
-   clearest outlier versus every tool surveyed.
-4. Add automatic TLS to the legacy nginx path (Certbot or an embedded
-   reverse proxy), matching Cockpit/Portainer/Coolify's out-of-the-box HTTPS.
+1. ✅ **Done.** The Session Manager + MCP path now has a real installer:
+   `install.sh` installs Node, runs `npm ci`, generates `MCP_AUTH_TOKEN`, and starts
+   `server/main.js` via a templated systemd unit — closing the single biggest gap.
+2. ✅ **Done.** `systemd/nomadtty.service` is now a genuine template
+   (`NOMADTTY_WORKING_DIR`/`NOMADTTY_NODE_BIN`/`NOMADTTY_USER` placeholders), installed
+   by `install.sh` the same way `ttyd.service` already was.
+3. ✅ **Done.** There is one deployment model now, not two — `Dockerfile`/
+   `docker-entrypoint.sh`/`install.sh` all run the Session Manager + MCP backend.
+4. ✅ **Done.** `install.sh NOMADTTY_TLS=certbot` + `NOMADTTY_TLS_EMAIL` obtains a Let's
+   Encrypt cert automatically (fails gracefully without aborting the install if DNS/
+   reachability isn't ready yet).
 
 ### Configuration & secrets (highest value-to-effort ratio)
-5. **Auto-generate and store `MCP_AUTH_TOKEN`** in an installer/setup script
-   (`openssl rand -hex 32`, written to a `chmod 600` env file, printed once)
-   instead of requiring the operator to run the command by hand — mirrors
-   Portainer's machine-generated `setup_token` pattern at low implementation
-   cost.
-6. Consider a single `.env`/config-file mechanism shared by both deployment
-   models, reducing the current two disjoint env-var surfaces (3 vars vs.
-   ~15 vars) to one.
+5. ✅ **Done.** `MCP_AUTH_TOKEN` is auto-generated and persisted across re-runs, in both
+   `install.sh` (`/etc/nomadtty/nomadtty.env`, `chmod 600`) and Docker
+   (`docker-entrypoint.sh`, printed via `docker logs`).
+6. ✅ **Done.** `install.sh` now persists *all* its settings (not just the token) into
+   one file, and `.env.example` documents every `server/**` runtime var for the
+   dev-quickstart path.
 
 ### Documentation & help (cheap, specific)
-7. **Add `--help`/`--version` output** to `install.sh` and `server/main.js`
-   — a GNU-standards baseline every comparator CLI meets; currently a
-   confirmed hard zero, not just undocumented.
-8. Add `CHANGELOG.md` (Keep a Changelog format) — common in this tier though
-   not universal (GitHub Releases is an acceptable substitute if preferred).
-9. Add a small number of contextual tooltips/richer empty-state guidance in
-   the Session Manager UI, matching the lightweight pattern used by Uptime
-   Kuma/Portainer (not a full onboarding tour).
+7. ✅ **Done.** `install.sh -h|--help|--version` and `node server/main.js -h|--help|--version`.
+8. ✅ **Done.** `CHANGELOG.md` added (Keep a Changelog format).
+9. ✅ **Done.** Tooltips on Create/Join/Close and richer empty-state copy in the
+   Session Manager UI.
 
 ### Product/UX (longer-term)
-10. Evaluate real multi-user access control (distinct from named sessions)
-    if multi-tenant use is a goal — the gap versus Cockpit/code-server.
-11. Revisit TLS/reverse-proxy defaults for the legacy model, since every
-    top-tier comparator (Cockpit, Portainer, Coolify) ships HTTPS by
-    default rather than leaving it entirely to the operator.
+10. ~~Evaluate real multi-user access control~~ — **explicitly declined by the operator
+    (2026-07-30)**: open LAN/Tailscale access to the webapp and MCP is the intended
+    model, not a gap. See `docs/ai/decision-log.md`'s matching entry. Do not re-propose
+    without the operator raising it again.
+11. ~~Revisit TLS/reverse-proxy defaults for the legacy model~~ — **done (2026-07-30)**:
+    `install.sh NOMADTTY_TLS=certbot` obtains a Let's Encrypt cert automatically.
