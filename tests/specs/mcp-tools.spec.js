@@ -43,12 +43,12 @@ test.afterEach(async ({ request }) => {
 });
 
 /** Types `text` (with Enter) and waits until its real stdout line is visible via get_screenshot. */
-async function runAndWaitForOutput(request, mcpSessionId, terminalId, text, outputLine) {
+async function runAndWaitForOutput(request, mcpSessionId, terminalId, text, outputLine, pollOpts) {
   await callToolExpectOk(request, mcpSessionId, 'type_command', { terminal_id: terminalId, text });
   return pollUntil(async () => {
     const shot = await callToolExpectOk(request, mcpSessionId, 'get_screenshot', { terminal_id: terminalId });
     return outputHasOwnLine(shot.content, outputLine) ? shot : null;
-  });
+  }, pollOpts);
 }
 
 test.describe('MCP protocol', () => {
@@ -93,7 +93,16 @@ test.describe('MCP protocol', () => {
 test.describe('get_screenshot', () => {
   test('captures the terminal\'s live viewport, including real command output', async ({ request, mcpSessionId, terminalId }) => {
     const marker = `screenshot_${test.info().testId}`;
-    const screenshot = await runAndWaitForOutput(request, mcpSessionId, terminalId, `echo ${marker}`, marker);
+    // Longer poll budget than the 8s default: this is the first test in the
+    // file to exercise a freshly-created session, so it pays real tmux/ttyd
+    // cold-start latency on top of this codebase's one-subprocess-spawn-per-
+    // tmux-call architecture -- confirmed repeatably marginal under load,
+    // not a logic bug (see docs/ai/mistakes.md). Scoped to this test only,
+    // not the shared pollUntil default, to avoid loosening every other
+    // test's timing assertions for one cold-start-sensitive case.
+    const screenshot = await runAndWaitForOutput(
+      request, mcpSessionId, terminalId, `echo ${marker}`, marker, { timeout: 15000 }
+    );
     expect(screenshot.format).toBe('text');
     expect(screenshot.width).toBeGreaterThan(0);
     expect(screenshot.height).toBeGreaterThan(0);
@@ -278,11 +287,18 @@ test.describe('type_command', () => {
     const marker = `unsent_${test.info().testId}`;
     await callToolExpectOk(request, mcpSessionId, 'type_command', { terminal_id: terminalId, text: `echo ${marker}`, submit: false });
 
-    // Immediate, not polled: submit:false has no async effect to wait for.
-    // Exactly one occurrence (the echoed input) proves it was NOT executed
-    // -- outputHasOwnLine would also correctly report false here, but an
-    // exact occurrence count is the more direct way to assert "not yet run".
-    const beforeEnter = await callToolExpectOk(request, mcpSessionId, 'get_screenshot', { terminal_id: terminalId });
+    // `type_command`'s tmux send-keys call (server/mcp/tmux.js's sendLiteral)
+    // returns once tmux has queued the bytes onto the pty, not once the
+    // shell has actually echoed them into the pane buffer capture-pane
+    // reads -- a real, if normally brief, gap. Poll (short budget: this is
+    // an echo landing, not a command running) until the marker appears at
+    // least once, THEN assert it's exactly once -- this removes the race on
+    // "has it echoed yet" while keeping the test's actual intent intact:
+    // unsent must still mean unexecuted, not merely "not yet visible".
+    const beforeEnter = await pollUntil(async () => {
+      const shot = await callToolExpectOk(request, mcpSessionId, 'get_screenshot', { terminal_id: terminalId });
+      return shot.content.includes(marker) ? shot : null;
+    }, { timeout: 3000 });
     expect(beforeEnter.content.split(marker).length - 1).toBe(1);
 
     await callToolExpectOk(request, mcpSessionId, 'send_keystroke', { terminal_id: terminalId, mode: 'named', keys: ['Enter'] });
@@ -302,12 +318,19 @@ test.describe('type_command', () => {
 test.describe('send_keystroke', () => {
   test('named mode: Ctrl+C interrupts a running foreground command', async ({ request, mcpSessionId, terminalId }) => {
     await callToolExpectOk(request, mcpSessionId, 'type_command', { terminal_id: terminalId, text: 'sleep 30' });
-    // "sleep 30" produces no stdout of its own, so this precondition check
-    // (the shell accepted the input) has to match the echoed *input* line
-    // itself -- there is no "real output" line to wait for instead.
+    // Matching the echoed *input* line only proves the shell accepted the
+    // keystrokes, not that `sleep` has actually been forked and become the
+    // pty's foreground process -- under CPU contention that fork/exec can
+    // lag behind the echo, and a C-c sent before it completes lands
+    // harmlessly, leaving `sleep 30` running for its full 30s (a real ~8s
+    // poll timeout downstream, not a fast assertion mismatch). Poll
+    // get_process_status instead, the same precondition the sibling
+    // "shows a child process while a command is running" test above already
+    // uses, so the interrupt is only sent once `sleep` genuinely exists in
+    // the process tree.
     await pollUntil(async () => {
-      const shot = await callToolExpectOk(request, mcpSessionId, 'get_screenshot', { terminal_id: terminalId });
-      return shot.content.includes('sleep 30') ? shot : null;
+      const status = await callToolExpectOk(request, mcpSessionId, 'get_process_status', { terminal_id: terminalId });
+      return status.processes.some((p) => p.command === 'sleep') ? status : null;
     });
 
     await callToolExpectOk(request, mcpSessionId, 'send_keystroke', { terminal_id: terminalId, mode: 'named', keys: ['C-c'] });

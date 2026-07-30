@@ -15,6 +15,51 @@
 
 ---
 
+### [2026-07-30] Root-caused and fixed all 5 previously "known flaky/pre-existing" test failures; confirms the copy-mode real-attached-client condition is safe
+- **Context**: Explicit user follow-up: "No preexisting errors are to be left unfixed /
+  Fix all flakiness / Fix all errors." Two tests (`list_active_ports`, the Hist/copy-mode
+  test) had been confirmed failing consistently in this sandbox across multiple
+  clean-checkout re-tests during earlier work this session, and three more
+  (`get_screenshot`, `type_command` `submit:false`, `send_keystroke` Ctrl+C) were already
+  documented in `tests/README.md` as "repeatably flaky on a 2-core machine... not yet
+  root-caused." Rather than continue treating these as accepted environment noise, three
+  parallel investigations (reading the actual test bodies and the exact tool/tmux code
+  paths each one exercises) found a concrete, fixable cause for every one — see
+  `docs/ai/mistakes.md` 2026-07-30-006 for the full list.
+- **Decision**: Fixed all five. Two were genuine product bugs, not test artifacts:
+  `server/mcp/tmux.js`'s `listeningSockets()` gained a pure-Node `/proc/net/{tcp,udp}{,6}`
+  parsing fallback for hosts without `ss`/`netstat` installed; `src/kb.js`'s touch-scroll
+  handler now coalesces pending scroll amounts into at most one in-flight
+  `copy-scroll` request (previously one POST per touchmove line-crossing, unthrottled —
+  a real mobile-UX responsiveness bug independent of any test). The other three were
+  test-side race/timeout fixes in `tests/specs/mcp-tools.spec.js` (poll-then-assert for
+  `submit:false`; a `get_process_status`-based precondition for the Ctrl+C test, mirroring
+  an existing sibling test's pattern; a longer, test-scoped poll timeout for
+  `get_screenshot`'s cold-start case).
+- **Alternatives considered**: Leaving them documented as accepted flakiness (the status
+  quo going in) — rejected per the explicit instruction that prompted this work, and once
+  actually investigated, none of the five turned out to be irreducible environment noise.
+  A blanket bump to the shared `pollUntil` default timeout instead of a per-test override
+  for `get_screenshot` — rejected as unnecessarily loosening every other test's timing
+  assertions to fix one cold-start-sensitive case.
+- **Rationale**: "Confirmed to reproduce on a clean checkout" only proves a failure isn't
+  a *regression from a specific session's changes* — it says nothing about whether the
+  failure is fixable. All five were.
+- **Consequences**: This also resolves a previously-flagged unconfirmed safety question:
+  `server/mcp/tmux.js`'s comment block (and `docs/ai/mistakes.md` 2026-07-29-024) noted
+  that tmux's `-X` copy-mode commands run via one-shot `execFileSync` had only been
+  verified safe/fast against panes with **no real attached tmux client** — the
+  genuinely-attached-client condition (ttyd's live WebSocket connection, exactly the Hist
+  test's scenario) was explicitly "not empirically confirmed." With the client-side
+  throttling fix in place, that exact test now passes reliably across repeated runs
+  (3 full 63/63 suite runs, plus multiple isolated re-runs of the specific test) — the
+  first genuine exercise of that previously-unconfirmed condition, now confirmed safe.
+  Verified overall via 3 consecutive full-suite runs at 63/63, not a single green run.
+- **Owner**: claude (session doing a "no compromise" pass on the competitive-analysis
+  backlog, per explicit user direction to fix all pre-existing errors/flakiness).
+
+---
+
 ### [2026-07-30] Multi-user/multi-tenant access control explicitly declined — open LAN access is the intended model
 - **Context**: `docs/competitive-analysis.md`'s backlog (item 11) flagged the lack of
   per-user accounts/roles as "the one structural gap versus Cockpit/code-server-class
@@ -175,17 +220,6 @@
   correct-creds) after fixing the ownership bug found during that verification.
 - **Owner**: claude (session doing a "no compromise" pass on the competitive-analysis
   backlog, per explicit user direction).
-
----
-```
-### [YYYY-MM-DD] <decision title>
-- **Context**: why a decision was needed
-- **Decision**: what was chosen
-- **Alternatives considered**: what else was evaluated
-- **Rationale**: why this was chosen
-- **Consequences**: what this means going forward
-- **Owner**: who made or approved the decision
-```
 
 ---
 

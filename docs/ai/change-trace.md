@@ -3,6 +3,41 @@
 <!-- last updated: 2026-07-30 -->
 <!-- add an entry for every notable change: what, why, affected areas, commit -->
 
+### [2026-07-30] Root-caused and fixed all 5 "known flaky/pre-existing" test failures — real 63/63
+- **Timestamp**: 2026-07-30 UTC
+- **Change**: Per explicit user instruction ("no preexisting errors are to be left
+  unfixed"), investigated and fixed all five tests previously documented as flaky or
+  confirmed-pre-existing-but-unfixed:
+  - `server/mcp/tmux.js`'s `listeningSockets()` gained a pure-Node
+    `/proc/net/{tcp,udp}{,6}` parsing fallback (with best-effort inode→pid attribution)
+    for hosts without `ss`/`netstat` installed — fixes `list_active_ports`.
+  - `src/kb.js`'s `initTouchScroll()` now coalesces pending scroll amounts into at most
+    one in-flight `copy-scroll` POST (flushed on the next animation frame), instead of
+    one POST per touchmove line-crossing — a real mobile-UX responsiveness fix, and the
+    root cause of the Hist/copy-mode test's flakiness.
+  - `tests/specs/mcp-tools.spec.js`: `submit:false` now polls until the echo lands before
+    asserting exactly-once (was zero-delay, racing the shell's echo); the Ctrl+C test's
+    precondition now polls `get_process_status` for `sleep` actually forking (was a
+    substring match on the echoed input line only); `get_screenshot`'s cold-start test
+    got a longer, test-scoped poll timeout (15s, not the shared 8s default).
+- **Rationale**: All five had been treated as accepted environment noise ("confirmed to
+  reproduce on a clean checkout, not this session's regression") without ever being
+  properly root-caused. None turned out to be irreducible — two were real product bugs.
+- **Affected areas**: `server/mcp/tmux.js`, `src/kb.js`,
+  `tests/specs/mcp-tools.spec.js`, `docs/ai/mistakes.md`, `docs/ai/decision-log.md`,
+  `tests/README.md`, `CHANGELOG.md`. Also cleaned up a stray duplicated Entry Template
+  block accidentally left mid-file in `docs/ai/decision-log.md` from an earlier edit
+  this session.
+- **Related decisions**: `docs/ai/decision-log.md`'s matching 2026-07-30 entry (also
+  confirms the previously-unverified tmux copy-mode real-attached-client safety
+  condition from mistakes.md 2026-07-29-024).
+- **Related mistakes**: `docs/ai/mistakes.md` 2026-07-30-006.
+- **Verification**: Each fix re-run in isolation multiple times (4-6 repeats) before
+  moving to the next; full Playwright suite run **3 consecutive times**, 63/63 every
+  time (not a single green run) — including the previously-untouched
+  `android-mobile-ux.spec.js`/`android-mobile-stress.spec.js` full suites re-run to
+  confirm the `kb.js` throttling change caused no regression elsewhere.
+
 ### [2026-07-30] Docker base image switched to alpine:3.20 (~4x smaller); CI gained nginx-config and Playwright jobs
 - **Timestamp**: 2026-07-30 UTC
 - **Change**: `Dockerfile`'s base image is now `alpine:3.20` (was `ubuntu:26.04`) —

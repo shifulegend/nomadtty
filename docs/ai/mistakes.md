@@ -5,6 +5,58 @@
 
 ---
 
+### [2026-07-30-006] Five "known pre-existing flaky/failing" tests were treated as environment noise instead of being root-caused — all had real, fixable causes
+- **Timestamp**: 2026-07-30 UTC
+- **Summary**: Two tests (`list_active_ports`, the Hist/copy-mode test) had been confirmed
+  failing consistently in this sandbox on both this session's changes and a clean
+  checkout, and three more (`get_screenshot`, `type_command` `submit:false`,
+  `send_keystroke` Ctrl+C) were already documented in `tests/README.md` as "repeatably
+  flaky on a 2-core machine... not yet root-caused." Per explicit user instruction ("no
+  preexisting errors are to be left unfixed"), all five were investigated properly
+  instead of continuing to treat them as unavoidable environment noise — every one had a
+  real, specific, fixable cause; none were actually "just flaky."
+- **Root causes and corrections** (see `docs/ai/decision-log.md`'s matching entry for
+  full detail):
+  1. `list_active_ports` — `server/mcp/tmux.js`'s `listeningSockets()` only tried `ss`,
+     with no `netstat`/procfs fallback; a missing `ss` binary silently produced an empty
+     port list instead of a surfaced error. **Fixed**: added a pure-Node
+     `/proc/net/{tcp,udp}{,6}` parsing fallback with best-effort inode→pid attribution.
+  2. Hist/copy-mode test — `src/kb.js`'s touch-scroll handler fired one POST per
+     touchmove line-crossing with zero debounce; a fast swipe could queue 100+ nearly-
+     simultaneous requests, each a blocking server-side tmux subprocess spawn,
+     serializing into multi-second latency. **This was a real user-facing bug**, not
+     just a test artifact — any real user swiping quickly would hit it too. **Fixed**:
+     coalesced pending scroll amounts into at most one in-flight request, flushed on the
+     next animation frame.
+  3. `type_command` `submit:false` — asserted "text not yet executed" with zero
+     delay/poll immediately after `type_command` returned, racing the shell's own echo
+     of the (unsubmitted) text into the pane buffer. **Fixed**: poll until the marker
+     first appears (echo landed), then assert it appears exactly once (not executed).
+  4. `send_keystroke` Ctrl+C — precondition matched the echoed *input* line
+     (`content.includes('sleep 30')`), not proof `sleep` had actually been forked as the
+     pty's foreground process; under contention the fork/exec-vs-interrupt race could be
+     lost. **Fixed**: poll `get_process_status` (mirroring an existing sibling test's
+     pattern) until `sleep` genuinely appears in the process tree before sending `C-c`.
+  5. `get_screenshot` — not a logic bug; the first test in the file to pay real
+     session-creation cold-start latency on top of this codebase's one-subprocess-per-
+     tmux-call architecture, against a shared 8s poll default that's admittedly marginal
+     under load. **Fixed**: a longer, test-scoped poll timeout (15s), not a change to the
+     shared default (would have loosened every other test's timing assertions).
+- **Detection method**: Three parallel Explore-agent investigations, each reading the
+  actual test body, the exact tool implementation, and the underlying tmux/OS primitives
+  it exercises — not just re-running the suite and hoping the failures wouldn't recur.
+- **Correction**: See the five fixes above. Verified with 3 full, consecutive 63/63
+  Playwright runs (not one) after all five fixes landed.
+- **Prevention rule**: "Confirmed pre-existing, reproduces on a clean checkout" proves a
+  failure isn't *this session's* regression — it does not prove the failure is
+  unfixable, or that it's purely an environment artifact safe to keep working around.
+  Documenting a flaky test as "known, not yet root-caused" is a legitimate short-term
+  triage step, but it is not a resolution — treat it as an open item to actually
+  investigate (reading the real code path the test exercises, not just re-running it)
+  the next time there's room to do so, rather than a permanent, accepted cost.
+
+---
+
 ### [2026-07-30-004] "Alpine has no ttyd apt package" was never actually true — an unverified assumption carried for over a month
 - **Timestamp**: 2026-07-30 UTC
 - **Summary**: The 2026-06-20 decision to base the Dockerfile on Ubuntu instead of

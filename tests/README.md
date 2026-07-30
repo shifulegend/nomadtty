@@ -137,27 +137,16 @@ or similar landing mid-keystroke) is a known, documented class of issue (see
 unreliable. If a run shows an isolated failure, re-run before assuming a
 regression; if a *specific* test fails repeatedly, that's a real signal.
 
-**Repeatably flaky on a 2-core machine (confirmed pre-existing, not caused by
-any specific change):** `mcp-tools.spec.js`'s `get_screenshot › captures the
-terminal's live viewport`, `type_command › submit:false leaves the text
-unsent`, and `send_keystroke › named mode: Ctrl+C interrupts a running
-foreground command` were confirmed, on 2026-07-30, to fail identically on a
-byte-for-byte clean checkout of commit `394e1e4` (before any changes from
-that session) run on the exact same 2-core/12GB Colab reference VM used to
-verify that session's own changes — ruling out that session's work as the
-cause before it was ever suspected further. `submit:false` in particular
-fails fast (~180ms, not a timeout), suggesting a genuine environment-
-sensitive assertion mismatch rather than pure timing. Not yet root-caused or
-fixed — tracked here so a future session doesn't waste time assuming its own
-changes caused these specific three.
-
-**Also confirmed pre-existing on this class of sandbox (2026-07-30):**
-`android-mobile-ux.spec.js`'s `Hist toggle reveals real scrollback via tmux
-copy-mode and never sends a PTY input byte` and `mcp-tools.spec.js`'s
-`list_active_ports › lists the MCP server's own listening port` were
-confirmed, while verifying the Docker/`install.sh` deployment-unification fix
-(see `docs/ai/decision-log.md`'s 2026-07-30 entry), to fail identically both
-with that fix applied and on a clean checkout of the commit immediately
-before it — ruling out that fix as the cause. Not yet root-caused; likely
-environment-specific (e.g. `ss`/`netstat` output shape or tmux copy-mode
-timing on this particular host class).
+**Resolved (2026-07-30):** five tests previously documented here as "repeatably flaky"
+or "confirmed pre-existing, not yet root-caused" — `get_screenshot › captures the
+terminal's live viewport`, `type_command › submit:false leaves the text unsent`,
+`send_keystroke › named mode: Ctrl+C interrupts a running foreground command`,
+`android-mobile-ux.spec.js`'s `Hist toggle reveals real scrollback via tmux copy-mode`,
+and `list_active_ports › lists the MCP server's own listening port` — were all
+root-caused and fixed, not just documented. Two were genuine product bugs
+(`server/mcp/tmux.js`'s `listeningSockets()` had no fallback when `ss`/`netstat` aren't
+installed; `src/kb.js`'s touch-scroll handler fired one unthrottled POST per touchmove
+step, a real mobile-UX responsiveness bug); three were test-side races/timeouts. See
+`docs/ai/decision-log.md`'s matching 2026-07-30 entry and `docs/ai/mistakes.md`
+2026-07-30-006 for the full detail. Verified via 3 consecutive full-suite runs at
+63/63, not a single green run.

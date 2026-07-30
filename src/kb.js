@@ -483,6 +483,43 @@
      touchmove's preventDefault() is unconditional (in or out of Hist
      mode) to keep suppressing iOS's page-bounce overscroll effect. */
   var LINE_PX = 18;
+
+  /* Coalesces scroll amounts across touchmove events into at most one
+     in-flight copy-scroll request at a time, instead of one POST per
+     line-crossing (a fast swipe can cross dozens of line thresholds in a
+     handful of touchmove events). Each POST drives a blocking tmux
+     subprocess server-side (server/mcp/tmux.js's tmuxBounded); firing one
+     per threshold-crossing let a single quick swipe queue up 100+ nearly-
+     simultaneous requests, serializing into multiple seconds of backend
+     latency for one gesture -- a real responsiveness bug independent of
+     any test, not just a timing artifact. Pending amounts accumulate
+     signed (up/down cancel naturally on direction reversal) and flush on
+     the next animation frame, merged with anything still pending if a
+     previous flush's request hasn't completed yet. */
+  var pendingScrollLines = 0, scrollFlushScheduled = false, scrollRequestInFlight = false;
+
+  function flushScroll() {
+    scrollFlushScheduled = false;
+    if (pendingScrollLines === 0 || scrollRequestInFlight) return;
+    var lines = pendingScrollLines;
+    pendingScrollLines = 0;
+    scrollRequestInFlight = true;
+    var direction = lines > 0 ? 'up' : 'down';
+    fetch('/api/sessions/' + SESSION_ID + '/copy-scroll', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'scroll', direction: direction, lines: Math.abs(lines) }),
+    }).then(onScrollSettled, onScrollSettled);
+  }
+  function onScrollSettled() {
+    scrollRequestInFlight = false;
+    if (pendingScrollLines !== 0) scheduleScrollFlush();
+  }
+  function scheduleScrollFlush() {
+    if (scrollFlushScheduled) return;
+    scrollFlushScheduled = true;
+    requestAnimationFrame(flushScroll);
+  }
+
   function initTouchScroll() {
     var xterm = document.querySelector('.xterm');
     if (!xterm) { setTimeout(initTouchScroll, 400); return; }
@@ -503,8 +540,10 @@
       lastY = y;
       var lines = Math.trunc(accY / LINE_PX);
       if (lines === 0) return;
-      postScroll({ action: 'scroll', direction: lines > 0 ? 'up' : 'down', lines: Math.abs(lines) });
       accY -= lines * LINE_PX;
+      pendingScrollLines += lines;
+      if (!SESSION_ID) return;
+      scheduleScrollFlush();
     }, { passive: false });
   }
   setTimeout(initTouchScroll, 800);
