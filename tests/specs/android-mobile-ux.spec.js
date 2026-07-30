@@ -196,6 +196,13 @@ test('Hist toggle reveals real scrollback via tmux copy-mode and never sends a P
   await page.keyboard.press('Enter');
   await capture.waitForOutputLine('hist_marker_200');
 
+  // Baseline: capture.getSentInput() accumulates from the moment the WS
+  // opened, so it already legitimately contains the "for i in ..." command
+  // just typed above (real, expected PTY input) -- the "zero bytes" check
+  // below must only cover the delta sent from here on, during Hist mode
+  // itself, not the whole test's input history.
+  const inputBeforeHist = capture.getSentInput();
+
   await page.locator('#kb-hist').tap();
   await expect(page.locator('#kb-hist')).toHaveClass(/on/);
 
@@ -244,23 +251,29 @@ test('Hist toggle reveals real scrollback via tmux copy-mode and never sends a P
     return !!m && parseInt(m[1], 10) > 0;
   }, null, { timeout: 8000 });
 
-  // The entire gesture -- toggling Hist on, swiping, and (below) toggling
-  // it back off -- must never put a single byte on the PTY input channel.
-  // This is the structural guarantee that replaces the old wheel-dispatch
-  // bug (mistakes.md 2026-07-29-018): scrolling now goes through a
-  // completely separate HTTP path (postScroll -> /api/sessions/:id/copy-scroll),
-  // never window._S.send().
-  expect(capture.getSentInput()).toBe('');
+  // The Hist gesture itself -- toggling on and swiping -- must never put a
+  // single byte on the PTY input channel. This is the structural guarantee
+  // that replaces the old wheel-dispatch bug (mistakes.md 2026-07-29-018):
+  // scrolling now goes through a completely separate HTTP path
+  // (postScroll -> /api/sessions/:id/copy-scroll), never window._S.send().
+  // Compared against the pre-Hist baseline, not an empty string, since the
+  // setup typing above legitimately did send real PTY input already.
+  expect(capture.getSentInput()).toBe(inputBeforeHist);
+  const inputAfterHistGesture = capture.getSentInput();
 
   await page.locator('#kb-hist').tap();
   await expect(page.locator('#kb-hist')).not.toHaveClass(/on/);
 
-  // Exiting Hist must return to a genuinely live, working terminal.
+  // Exiting Hist must return to a genuinely live, working terminal --
+  // compared against the post-gesture baseline (not an empty string, since
+  // the buffer already has real content from the setup typing) to confirm
+  // this typing genuinely adds NEW bytes, not just that the accumulator is
+  // non-empty from earlier.
   await page.click('.xterm-screen');
   await page.keyboard.type('echo hist_off_still_alive');
   await page.keyboard.press('Enter');
   await capture.waitForOutputLine('hist_off_still_alive');
-  expect(capture.getSentInput()).not.toBe(''); // real typing after Hist-off does send bytes, as expected
+  expect(capture.getSentInput()).not.toBe(inputAfterHistGesture);
 });
 
 test('toolbar buttons ignore drag/scroll gestures but still register a genuine stationary tap', async ({ page }) => {
