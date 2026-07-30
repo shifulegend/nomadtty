@@ -495,7 +495,6 @@
     }, { passive: true });
 
     xterm.addEventListener('touchmove', function (e) {
-      console.log('DEBUG_TOUCHMOVE', 'touches=' + e.touches.length, 'histMode=' + histMode);
       if (e.touches.length !== 1) return;
       e.preventDefault();
       if (!histMode) return;
@@ -503,7 +502,6 @@
       accY += y - lastY;
       lastY = y;
       var lines = Math.trunc(accY / LINE_PX);
-      console.log('DEBUG_TOUCHMOVE_CALC', 'y=' + y, 'accY=' + accY, 'lines=' + lines);
       if (lines === 0) return;
       postScroll({ action: 'scroll', direction: lines > 0 ? 'up' : 'down', lines: Math.abs(lines) });
       accY -= lines * LINE_PX;

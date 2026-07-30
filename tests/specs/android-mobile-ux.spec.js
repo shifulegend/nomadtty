@@ -181,7 +181,6 @@ test('mobile toolbar: CTRL modifier, Fn row toggle, and zoom all function on a t
 });
 
 test('Hist toggle reveals real scrollback via tmux copy-mode and never sends a PTY input byte', async ({ page }) => {
-  page.on('console', (msg) => console.log('BROWSER_CONSOLE:', msg.text()));
   const capture = captureTerminalSocket(page);
   await createSessionViaUi(page);
   await waitForTerminalReady(page);
@@ -227,11 +226,23 @@ test('Hist toggle reveals real scrollback via tmux copy-mode and never sends a P
 
   // The redraw arrives over the same live WS ttyd already holds (tmux
   // pushes it to every attached client, ttyd included) -- no separate
-  // fetch/render path exists client-side for this. A SECOND occurrence of
-  // the marker (the first was the original typed echo) proves the
-  // scrolled-into-history content genuinely repainted, not just that the
-  // marker was present at some point in this test's lifetime.
-  await capture.waitForOutputCount('hist_marker_1\r\n', 2, 8000);
+  // fetch/render path exists client-side for this. Assert on tmux's own
+  // rendered copy-mode position indicator ("[N/total]", shown in the
+  // top-right corner) reaching N > 0, rather than matching specific marker
+  // text in the accumulated WS byte stream: that stream can lose frames
+  // across a transient WS reconnect (observed under load -- ttyd resyncs
+  // the client to current state on reconnect, but capture.getOutput()'s
+  // accumulator has no way to know a gap occurred), while the live DOM
+  // always reflects tmux's actual current position regardless. This is
+  // also a strictly stronger signal than spotting one marker line: it
+  // directly proves genuine scrolling occurred, not just that some redraw
+  // happened to include familiar text.
+  await page.waitForFunction(() => {
+    var el = document.querySelector('.xterm-rows') || document.querySelector('.xterm-screen');
+    if (!el) return false;
+    var m = el.textContent.match(/\[(\d+)\/(\d+)\]/);
+    return !!m && parseInt(m[1], 10) > 0;
+  }, null, { timeout: 8000 });
 
   // The entire gesture -- toggling Hist on, swiping, and (below) toggling
   // it back off -- must never put a single byte on the PTY input channel.
