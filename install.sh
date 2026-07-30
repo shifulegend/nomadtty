@@ -78,6 +78,10 @@ Options are environment variables, e.g.:
   NOMADTTY_TLS_EMAIL     contact email, required with NOMADTTY_TLS=certbot
   NOMADTTY_BASIC_AUTH    "user:password" — adds nginx Basic Auth
 
+Runs nomadtty as a systemd service when systemd is PID 1; otherwise (e.g.
+containers, minimal cloud images) falls back to a background process managed
+via start-stop-daemon, with instructions for restarting it printed at the end.
+
 Full documentation: https://github.com/shifulegend/nomadtty#readme
 USAGE
         exit 0
@@ -172,6 +176,19 @@ if [ -n "$NOMADTTY_BASIC_AUTH" ] && ! echo "$NOMADTTY_BASIC_AUTH" | grep -qE '^[
     exit 1
 fi
 
+# ── Detect whether systemd is actually running as PID 1 ─────────────────────
+# `systemctl` can be present on PATH (e.g. from a base image's package set)
+# while PID 1 is something else entirely (containers, minimal cloud images,
+# WSL without systemd) — /run/systemd/system only exists when a real systemd
+# instance is running, so check both. Found via a real zero-context install
+# test hard-crashing at the systemd step with "systemctl: command not found"
+# and no fallback at all (docs/ai/mistakes.md 2026-07-30-007) — every
+# `systemctl`/service-management step below is now conditional on this.
+HAS_SYSTEMD=0
+if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+    HAS_SYSTEMD=1
+fi
+
 echo "==> NomadTTY installer"
 echo "    Service user     : $NOMADTTY_USER"
 echo "    Install directory: $INSTALL_DIR"
@@ -180,6 +197,13 @@ echo "    MCP server        : $MCP_HOST:$MCP_PORT"
 echo "    nginx host        : ${NOMADTTY_HOST:-_ (any hostname)}"
 echo "    TLS               : $NOMADTTY_TLS"
 echo "    Basic Auth        : $([ -n "$NOMADTTY_BASIC_AUTH" ] && echo enabled || echo disabled)"
+if [ "$HAS_SYSTEMD" = "1" ]; then
+    echo "    Init system       : systemd (nomadtty will run as a systemd service)"
+else
+    echo "    Init system       : none detected (nomadtty will run as a background"
+    echo "                        process via start-stop-daemon — see the summary"
+    echo "                        at the end for manual start/stop/log commands)"
+fi
 echo ""
 
 # ── Dependencies ────────────────────────────────────────────────────────────
@@ -282,23 +306,59 @@ NOMADTTY_BASIC_AUTH=$NOMADTTY_BASIC_AUTH
 EOF
 chmod 600 "$ENV_FILE"
 
-# ── Configure the nomadtty systemd service ──────────────────────────────────
+# ── Configure the nomadtty service ──────────────────────────────────────────
 echo "==> Configuring nomadtty service..."
 NODE_BIN="$(command -v node)"
-cp "$INSTALL_DIR/systemd/nomadtty.service" "$SERVICE_FILE"
-sed -i "s#NOMADTTY_WORKING_DIR#$INSTALL_DIR#g" "$SERVICE_FILE"
-sed -i "s#NOMADTTY_NODE_BIN#$NODE_BIN#g" "$SERVICE_FILE"
-sed -i "s/NOMADTTY_USER/$NOMADTTY_USER/g" "$SERVICE_FILE"
+NOMADTTY_PID_FILE="/var/run/nomadtty.pid"
+NOMADTTY_LOG_FILE="/var/log/nomadtty.log"
 
-# Retire the old raw-ttyd-only service if a previous install left it running —
-# nginx no longer proxies to it (see docs/ai/mistakes.md 2026-07-30-001).
-if systemctl list-unit-files ttyd.service >/dev/null 2>&1; then
-    systemctl disable --now ttyd.service >/dev/null 2>&1 || true
+if [ "$HAS_SYSTEMD" = "1" ]; then
+    cp "$INSTALL_DIR/systemd/nomadtty.service" "$SERVICE_FILE"
+    sed -i "s#NOMADTTY_WORKING_DIR#$INSTALL_DIR#g" "$SERVICE_FILE"
+    sed -i "s#NOMADTTY_NODE_BIN#$NODE_BIN#g" "$SERVICE_FILE"
+    sed -i "s/NOMADTTY_USER/$NOMADTTY_USER/g" "$SERVICE_FILE"
+
+    # Retire the old raw-ttyd-only service if a previous install left it running —
+    # nginx no longer proxies to it (see docs/ai/mistakes.md 2026-07-30-001).
+    if systemctl list-unit-files ttyd.service >/dev/null 2>&1; then
+        systemctl disable --now ttyd.service >/dev/null 2>&1 || true
+    fi
+
+    systemctl daemon-reload
+    systemctl enable --now nomadtty
+    systemctl reload nginx
+else
+    # No systemd running as PID 1 — fall back to start-stop-daemon (part of
+    # dpkg, always present on Debian/Ubuntu, including minimal containers).
+    # A single `exec ... >>log 2>&1` with no further shell statements keeps
+    # the spawned process at the same PID start-stop-daemon records in the
+    # pidfile (verified: a compound `cmd1; cmd2` script forks an extra,
+    # untracked child for the final command — `exec` alone doesn't); env
+    # vars exported into this script's own shell before the call are
+    # inherited by the child even across --chuid (verified empirically).
+    if [ -f "$NOMADTTY_PID_FILE" ]; then
+        start-stop-daemon --stop --pidfile "$NOMADTTY_PID_FILE" \
+            --retry TERM/5/KILL/2 >/dev/null 2>&1 || true
+        rm -f "$NOMADTTY_PID_FILE"
+    fi
+    set -a
+    # shellcheck disable=SC1090
+    . "$ENV_FILE"
+    set +a
+    start-stop-daemon --start --background --make-pidfile \
+        --pidfile "$NOMADTTY_PID_FILE" --chuid "$NOMADTTY_USER" \
+        --exec /bin/sh -- -c \
+        "cd '$INSTALL_DIR' && exec '$NODE_BIN' server/main.js >>'$NOMADTTY_LOG_FILE' 2>&1"
+
+    # nginx's own package postinst won't have started it under a policy-rc.d
+    # that forbids service auto-start (the norm in minimal container images);
+    # start it directly the first time, reload thereafter.
+    if pgrep -x nginx >/dev/null 2>&1; then
+        nginx -s reload
+    else
+        nginx
+    fi
 fi
-
-systemctl daemon-reload
-systemctl enable --now nomadtty
-systemctl reload nginx
 
 # ── TLS (Let's Encrypt via certbot) ─────────────────────────────────────────
 TLS_STATUS="not requested"
@@ -378,11 +438,36 @@ if [ "$MCP_HOST" != "127.0.0.1" ] && [ "$MCP_HOST" != "localhost" ]; then
 fi
 echo ""
 echo "   Logs:"
-echo "     journalctl -u nomadtty -f"
+if [ "$HAS_SYSTEMD" = "1" ]; then
+    echo "     journalctl -u nomadtty -f"
+else
+    echo "     tail -f $NOMADTTY_LOG_FILE"
+fi
 echo "     tail -f /var/log/nginx/nomadtty.access.log"
 echo ""
-echo "   Uninstall:"
-echo "     systemctl disable --now nomadtty"
-echo "     rm -f $SERVICE_FILE $NGINX_CONF /etc/nginx/sites-enabled/nomadtty"
-echo "     rm -rf $ENV_DIR $INSTALL_DIR"
-echo "     systemctl daemon-reload && systemctl reload nginx"
+if [ "$HAS_SYSTEMD" = "1" ]; then
+    echo "   Restart:"
+    echo "     systemctl restart nomadtty"
+    echo ""
+    echo "   Uninstall:"
+    echo "     systemctl disable --now nomadtty"
+    echo "     rm -f $SERVICE_FILE $NGINX_CONF /etc/nginx/sites-enabled/nomadtty"
+    echo "     rm -rf $ENV_DIR $INSTALL_DIR"
+    echo "     systemctl daemon-reload && systemctl reload nginx"
+else
+    echo "   No systemd was detected on this host, so nomadtty is running as a"
+    echo "   background process (PID file: $NOMADTTY_PID_FILE), not a service."
+    echo "   It will NOT restart automatically on reboot or crash — re-run this"
+    echo "   installer (safe, idempotent) to restart it, e.g. after a reboot."
+    echo ""
+    echo "   Restart:"
+    echo "     sudo NOMADTTY_BRANCH=$BRANCH bash install.sh   # or re-run the curl one-liner"
+    echo ""
+    echo "   Stop:"
+    echo "     start-stop-daemon --stop --pidfile $NOMADTTY_PID_FILE --retry TERM/5/KILL/2"
+    echo ""
+    echo "   Uninstall:"
+    echo "     start-stop-daemon --stop --pidfile $NOMADTTY_PID_FILE --retry TERM/5/KILL/2"
+    echo "     rm -f $NGINX_CONF /etc/nginx/sites-enabled/nomadtty $NOMADTTY_PID_FILE"
+    echo "     rm -rf $ENV_DIR $INSTALL_DIR"
+fi

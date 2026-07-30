@@ -15,6 +15,52 @@
 
 ---
 
+### [2026-07-30] install.sh falls back to start-stop-daemon when systemd isn't PID 1, found via a real zero-context sub-agent install test
+- **Context**: User requested a live validation of install-process self-explanatoriness:
+  spawn a zero-context sub-agent, give it nothing but the install one-liner and
+  `--help`, restrict it to the tool's own output, and require it to halt/report/be
+  respawned on any error. The first sub-agent run (against a fresh Ubuntu 26.04
+  container with no init system, i.e. `sleep infinity` as PID 1 and no `systemctl`)
+  failed exactly as designed: `install.sh` hard-crashed at
+  `systemctl daemon-reload` (`command not found`, exit 127) with no fallback and no
+  documented way around it — see `docs/ai/mistakes.md` 2026-07-30-007 for full detail.
+- **Decision**: `install.sh` now detects whether systemd is genuinely running as PID 1
+  (`command -v systemctl` AND `/run/systemd/system` both present — the binary alone can
+  exist without an active systemd instance) and, when it isn't, manages the backend as a
+  background process via `start-stop-daemon` instead of a systemd unit: privilege-dropped
+  to `NOMADTTY_USER`, tracked via a PID file at `/var/run/nomadtty.pid`, restarted
+  idempotently on every install.sh re-run. The final summary output, `--help` text, and
+  install-time info banner all branch on this detection so the printed logs/restart/
+  uninstall instructions always match how the backend is actually being run.
+- **Alternatives considered**: (a) Requiring systemd and failing with a clearer error
+  message — rejected, since containers/minimal images are a completely ordinary target
+  for a "one-command self-hosted install," not an unsupported edge case, and the whole
+  point of this validation exercise was to make the tool actually self-explanatory
+  end-to-end, not to document a limitation. (b) A raw `nohup ... &` background job
+  without `start-stop-daemon` — rejected after empirically finding it doesn't track the
+  real PID cleanly through privilege drops/exec chains the way `start-stop-daemon` does
+  natively, and `start-stop-daemon` is already guaranteed present (part of `dpkg`,
+  `Essential: yes`) on every Debian/Ubuntu target this script supports.
+- **Rationale**: matches this repo's standing verification discipline — the fix was
+  designed only after empirically confirming (in a real disposable container) that env
+  vars survive a `start-stop-daemon --chuid` privilege drop, that a single unbroken
+  `exec cmd >>log 2>&1` (not a multi-statement script) is what keeps the tracked PID
+  accurate, and that a full install + idempotent re-run + real MCP `initialize` →
+  `create_session` round trip all succeed end-to-end.
+- **Consequences**: `install.sh` now has two supported process-management paths
+  (systemd and start-stop-daemon) that must both be kept working by any future change to
+  the "Configure the nomadtty service" section; the non-systemd path does not survive a
+  host reboot automatically (documented explicitly in the printed summary — re-running
+  install.sh is the documented recovery, since there's no init to re-launch it). Sub-agent
+  1 is being respawned fresh against a new container to re-attempt the full validation
+  with this fix in place.
+- **Owner**: approved via the user's original zero-context-validation request; the
+  specific fallback mechanism was an implementation decision made in response to the
+  failure it surfaced, consistent with "diagnose and fix the actual tool, not a
+  workaround" per that request's own halt/fix/respawn protocol.
+
+---
+
 ### [2026-07-30] Root-caused and fixed all 5 previously "known flaky/pre-existing" test failures; confirms the copy-mode real-attached-client condition is safe
 - **Context**: Explicit user follow-up: "No preexisting errors are to be left unfixed /
   Fix all flakiness / Fix all errors." Two tests (`list_active_ports`, the Hist/copy-mode
