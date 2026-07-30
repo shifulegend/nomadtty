@@ -15,6 +15,48 @@
 
 ---
 
+### [2026-07-30] Zero-context tailnet-hosting validation (sub-agent 2) skipped — sandbox network policy blocks Tailscale, not a NomadTTY issue
+- **Context**: After sub-agent 1's local-hosting validation passed (see the matching
+  entry below), the user's original request called for a second zero-context sub-agent
+  validating hosting over a tailnet. Provisioning that sub-agent's environment (a Docker
+  container with `--cap-add=NET_ADMIN --device=/dev/net/tun`, `tailscale` installed,
+  `tailscaled` running) hit a hard blocker before the sub-agent itself was ever launched:
+  `tailscale up --authkey=...` hung, and `tailscaled`'s own log showed repeated
+  `register request: Post "https://controlplane.tailscale.com/machine/register": ...
+  unexpected HTTP response: 403 Forbidden` — even after tailscaled's own fallback of
+  forcing a direct port-443 dial. A plain `curl` GET to the same hostname succeeded
+  (302), and the session's documented agent-proxy status endpoint showed no relay
+  failures and no proxy env vars set inside the container at all — indicating the block
+  is a lower-level sandbox/infrastructure network-egress policy rejecting Tailscale's
+  control-plane protocol specifically (a common, sensible security posture: blocking
+  outbound VPN/mesh-tunnel establishment from sandboxed compute), not anything about
+  NomadTTY or its documentation/install process.
+- **Decision**: Per the environment's own explicit guidance ("403 ... do not retry or
+  route around it — report the blocked host"), stopped attempting workarounds and asked
+  the user how to proceed. The user chose to skip sub-agent 2 entirely and close out the
+  overall validation exercise on sub-agent 1's PASS result alone.
+- **Alternatives considered**: (a) validating only the pre-`tailscale up` setup
+  instructions without a live registration — offered, not chosen; (b) attempting the
+  test from a different, non-sandboxed environment — offered, not chosen; (c) trying
+  further protocol-level workarounds (alternate transports, exit-node/relay-only modes)
+  — not offered/attempted, since the environment's guidance explicitly says not to route
+  around a 403 from a blocked destination.
+- **Consequences**: NomadTTY's Tailscale-hosting instructions (README's Tailscale Setup
+  section) remain unvalidated by a live zero-context run in this session — this is a
+  testing-environment limitation, not a known product gap, and should not be read as a
+  signal that anything in the tool itself needs fixing. The real Tailscale auth key
+  provided earlier in this session was used in several failed registration attempts
+  (visible only in `tailscaled`'s own logs/network traffic, never in chat) before this
+  was caught; the corresponding scratch file has been securely deleted from this
+  session's environment. If tailnet-hosting validation is wanted later, it needs an
+  environment whose network policy permits outbound Tailscale control-plane
+  registration.
+- **Owner**: blocker identified and escalated by the assistant per the environment's own
+  "report, don't route around" instruction; skip decision made by the user via
+  `AskUserQuestion`.
+
+---
+
 ### [2026-07-30] install.sh falls back to start-stop-daemon when systemd isn't PID 1, found via a real zero-context sub-agent install test
 - **Context**: User requested a live validation of install-process self-explanatoriness:
   spawn a zero-context sub-agent, give it nothing but the install one-liner and
