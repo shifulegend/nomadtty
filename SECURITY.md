@@ -45,12 +45,12 @@ Review and merge dependency PRs promptly; do not auto-merge without reading the 
 
 ## Known hardening recommendations
 
-| Recommendation | Priority | Notes |
-|----------------|----------|-------|
-| Deploy behind Tailscale or a VPN | **High** | Never expose port 80/443 publicly without authentication |
-| Enable HTTPS (Let's Encrypt / Tailscale Serve) | **High** | Required for `navigator.clipboard` API; reduces session-hijacking risk |
-| Add nginx `auth_basic` or OAuth2 proxy | **High** | Extra authentication layer in front of nginx |
-| Run ttyd as the deploy user (not root) | **Required** | `User=ubuntu` in systemd service — do not change |
-| Rate-limit nginx connections | **Medium** | `limit_req_zone` prevents brute-force against the terminal endpoint |
-| Restrict `server_name` to your exact hostname | **Medium** | Prevents host-header injection; set `NOMADTTY_HOST` to a real domain |
-| Enable `Content-Security-Policy` header in nginx | **Low** | Reduces XSS surface; requires testing with ttyd's bundled xterm.js |
+| Recommendation | Priority | Status |
+|----------------|----------|--------|
+| Deploy behind Tailscale or a VPN | **High** | Your responsibility — see the Tailscale Setup section of README.md; not automated by `install.sh` (a VPN is a separate tool/tunnel, not something an installer should silently require) |
+| Enable HTTPS (Let's Encrypt / Tailscale Serve) | **High** | **Available**: `install.sh NOMADTTY_TLS=certbot NOMADTTY_TLS_EMAIL=you@example.com` obtains and auto-renews a Let's Encrypt cert via `certbot --nginx` (requires a real, publicly-resolvable `NOMADTTY_HOST`). Tailscale Serve remains the alternative for Tailscale-only deployments. |
+| Add nginx `auth_basic` or OAuth2 proxy | **High** | **Available (auth_basic)**: `install.sh NOMADTTY_BASIC_AUTH=user:password` adds a Basic Auth layer in front of the Session Manager/terminal UI, independent of `MCP_AUTH_TOKEN`. A full OAuth2 proxy is not implemented — that's a heavier integration (a separate reverse-proxy layer) left to operators who need it. |
+| Run the backend as a non-root deploy user | **Required** | `NOMADTTY_USER` in `install.sh`/`systemd/nomadtty.service` — do not change to root |
+| Rate-limit nginx connections | **Medium** | **Done**: `limit_req_zone`/`limit_req` (10r/s, burst 20) is on by default in `nginx/ttyd.conf` itself, not just documented |
+| Restrict `server_name` to your exact hostname | **Medium** | **Done**: `install.sh` validates `NOMADTTY_HOST` against a hostname regex before use |
+| Enable `Content-Security-Policy` header in nginx | **Low** | Not yet implemented — reduces XSS surface, but requires compatibility testing against `kb.js`'s inline WebSocket hook and ttyd's bundled xterm.js first; tracked in `docs/ai/project-overview.md`'s TODO list |

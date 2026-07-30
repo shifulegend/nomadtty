@@ -5,6 +5,38 @@
 
 ---
 
+### [2026-07-30-002] install.sh's Basic Auth htpasswd file was unreadable by nginx's worker process (every request 500'd)
+- **Timestamp**: 2026-07-30 UTC
+- **Summary**: Implementing `install.sh`'s new `NOMADTTY_BASIC_AUTH` option, the htpasswd
+  file was created with `chmod 640` while still owned `root:root` (the default from
+  redirecting `openssl passwd` output into a file as root). `nginx -t` passed and the
+  service started fine, but every real HTTP request — with or without correct
+  credentials — returned `500 Internal Server Error`, not the expected `401`/`200`.
+- **Root cause**: nginx's worker processes run as `www-data` on Debian/Ubuntu, not root.
+  `auth_basic_user_file` needs the worker to be able to `open()` the htpasswd file;
+  `root:root 640` denies that to any non-root, non-root-group process. The master
+  process (root) loads the config fine, masking the problem until an actual request hit
+  a worker.
+- **Affected files**: `install.sh` (the `NOMADTTY_BASIC_AUTH` htpasswd-generation step).
+- **Detection method**: Actually sent real HTTP requests (`curl -u user:pass ...`) against
+  a live nginx+Session Manager pair after enabling Basic Auth, instead of stopping at
+  `nginx -t` passing — the config being syntactically valid said nothing about whether
+  the *runtime* worker process could read the file it referenced. `docker exec ... cat
+  /var/log/nginx/nomadtty.error.log` showed the exact `open() ... failed (13: Permission
+  denied)` line that pinpointed it immediately.
+- **Correction**: `chown root:www-data "$HTPASSWD_FILE"` before `chmod 640`, so the
+  worker's group membership grants read access without making the file world-readable.
+  Re-verified: `401` with no credentials, `401` with wrong credentials, `200` with correct
+  credentials — all three cases now behave as expected.
+- **Prevention rule**: `nginx -t`/a syntactically valid config proves nginx will *start*,
+  not that every file it references is *readable by the process that will actually serve
+  requests* (the worker, running as a different, less-privileged user than the master).
+  Any new nginx directive that reads a file at request time (`auth_basic_user_file`,
+  `ssl_certificate_key`, etc.) needs its ownership/permissions checked against the actual
+  worker user, and verified with a real end-to-end request — not just a config-test pass.
+
+---
+
 ### [2026-07-30-001] Docker/install.sh quickstart was completely broken (502 Bad Gateway on every request)
 - **Timestamp**: 2026-07-30 UTC
 - **Summary**: While scoping work to unify NomadTTY's two deployment models, actually

@@ -3,6 +3,35 @@
 <!-- last updated: 2026-07-30 -->
 <!-- add an entry for every notable change: what, why, affected areas, commit -->
 
+### [2026-07-30] install.sh: opt-in TLS (Certbot), Basic Auth, and default nginx rate limiting
+- **Timestamp**: 2026-07-30 UTC
+- **Change**: `install.sh` gained `NOMADTTY_TLS=certbot`/`NOMADTTY_TLS_EMAIL` (Let's
+  Encrypt via `certbot --nginx`, non-aborting on failure) and
+  `NOMADTTY_BASIC_AUTH=user:pass` (nginx `auth_basic`, htpasswd `chown root:www-data`).
+  `nginx/ttyd.conf` gained a default `limit_req_zone`/`limit_req` (10r/s, burst 20).
+  README/SECURITY.md/`.claude/rules/config.md`/`.claude/rules/infra.md`/
+  `docs/ai/project-overview.md` updated to match; the last also had its stale
+  "two deployment models" note and legacy sub_filter architecture description replaced
+  with the current, accurate single-model architecture.
+- **Rationale**: Turns three SECURITY.md "documented recommendation only" hardening
+  items (HTTPS, auth_basic/OAuth2 proxy, rate limiting) into real, tested, one-flag (or
+  zero-flag, for rate limiting) options — from the competitive-analysis backlog.
+- **Affected areas**: `install.sh`, `nginx/ttyd.conf`, `README.md`, `SECURITY.md`,
+  `.claude/rules/config.md`, `.claude/rules/infra.md`, `docs/ai/project-overview.md`.
+- **Related decisions**: `docs/ai/decision-log.md`'s 2026-07-30 "install.sh gets opt-in
+  TLS..." entry.
+- **Related mistakes**: `docs/ai/mistakes.md` 2026-07-30-002 (htpasswd ownership bug,
+  found and fixed during verification).
+- **Verification**: `shellcheck install.sh` passes. In a disposable container: Basic
+  Auth verified end-to-end (401 no-creds, 401 wrong-creds, 200 correct-creds, and clean
+  removal of both the htpasswd file and nginx directives when unset on a re-run);
+  `NOMADTTY_TLS=certbot` validation fast-fails correctly when `NOMADTTY_HOST`/
+  `NOMADTTY_TLS_EMAIL` are missing, and a real certbot failure (unresolvable test domain)
+  was confirmed not to abort the rest of the install. Real Let's Encrypt issuance itself
+  could not be exercised (no public DNS record can point at this sandbox's ephemeral
+  container) — documented as a residual, environment-specific verification gap, not
+  assumed to work.
+
 ### [2026-07-30] Fixed Docker/install.sh 502 Bad Gateway; unified the two deployment models
 - **Timestamp**: 2026-07-30 UTC
 - **Change**: `Dockerfile`, `docker-entrypoint.sh`, `install.sh`, and

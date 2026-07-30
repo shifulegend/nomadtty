@@ -112,6 +112,9 @@ All options are env vars — no config file to hand-edit before install:
 | `MCP_PORT` | `4200` | MCP server port |
 | `MCP_HOST` | `0.0.0.0` | MCP server bind address — set `127.0.0.1` for local-only access |
 | `SESSION_MANAGER_PORT` | `4000` | Session Manager port (loopback-only) |
+| `NOMADTTY_TLS` | `none` | `certbot` obtains a Let's Encrypt cert (requires `NOMADTTY_HOST` + `NOMADTTY_TLS_EMAIL`, a real DNS record, and port 80 reachable from the internet) |
+| `NOMADTTY_TLS_EMAIL` | _(none)_ | Contact email for Let's Encrypt (required with `NOMADTTY_TLS=certbot`) |
+| `NOMADTTY_BASIC_AUTH` | _(none)_ | `user:password` — adds nginx Basic Auth in front of the UI, independent of `MCP_AUTH_TOKEN` |
 
 **With a custom domain:**
 
@@ -125,6 +128,15 @@ curl -fsSL https://raw.githubusercontent.com/shifulegend/nomadtty/main/install.s
 ```bash
 curl -fsSL https://raw.githubusercontent.com/shifulegend/nomadtty/main/install.sh \
   | sudo MCP_AUTH_TOKEN=$(openssl rand -hex 32) NOMADTTY_USER=ubuntu bash
+```
+
+**With automatic HTTPS and Basic Auth:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/shifulegend/nomadtty/main/install.sh \
+  | sudo NOMADTTY_HOST=terminal.example.com \
+         NOMADTTY_TLS=certbot NOMADTTY_TLS_EMAIL=you@example.com \
+         NOMADTTY_BASIC_AUTH=admin:$(openssl rand -hex 16) bash
 ```
 
 ### Uninstall
