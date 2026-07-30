@@ -8,6 +8,12 @@ and this project's version scheme follows [Semantic Versioning](https://semver.o
 ## [Unreleased]
 
 ### Fixed
+- **Critical**: `install.sh` hard-crashed (`systemctl: command not found`, no
+  fallback) on any host without systemd as PID 1 — a completely ordinary target
+  for a one-command installer (containers, minimal cloud images). Found via a
+  live zero-context install-validation test. Now detects this and falls back
+  to `start-stop-daemon` (always present on Debian/Ubuntu) for process
+  management, with matching `--help`/summary output.
 - `server/mcp/tmux.js`'s `list_active_ports` tool returned an empty list on any host
   without `ss`/`netstat` installed instead of surfacing an error — added a pure-Node
   `/proc/net/{tcp,udp}{,6}` parsing fallback.

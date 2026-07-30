@@ -3,6 +3,27 @@
 <!-- last updated: 2026-07-30 -->
 <!-- add an entry for every notable change: what, why, affected areas, commit -->
 
+### [2026-07-30] install.sh: fall back to start-stop-daemon when no systemd is present
+- **Timestamp**: 2026-07-30 UTC
+- **Change**: Found via a live zero-context sub-agent install-validation run (fresh
+  Ubuntu 26.04 container, no init system) that `install.sh` hard-crashed with
+  `systemctl: command not found` at the service-configuration step, with no fallback
+  and nothing in `--help` about it. `install.sh` now detects real PID-1 systemd
+  (`command -v systemctl` + `/run/systemd/system`) and, when absent, runs the backend
+  via `start-stop-daemon` instead — privilege-dropped to `NOMADTTY_USER`, PID-file
+  tracked at `/var/run/nomadtty.pid`, idempotent across re-runs. `--help` text, the
+  install-time info banner, and the final summary's Logs/Restart/Stop/Uninstall
+  sections all branch on which path was used. See `docs/ai/mistakes.md` 2026-07-30-007
+  and `docs/ai/decision-log.md`'s matching entry for full root-cause/verification detail.
+- **Verified**: `shellcheck install.sh` clean; a full real install run in a fresh
+  container (via `NOMADTTY_LOCAL_SOURCE`) reached "HTTP 200 OK — Session Manager is
+  responding"; a real MCP `initialize` → `create_session` round trip over HTTP
+  succeeded; a second install.sh run on the same container correctly stopped the old
+  background process and started a new one with the same preserved `MCP_AUTH_TOKEN`;
+  confirmed via `ps`/`start-stop-daemon --stop` that exactly one node process runs at a
+  time and stop actually terminates it.
+- **Affected areas**: `install.sh`.
+
 ### [2026-07-30] Clarified Tailscale is optional, not compulsory, in README/SECURITY.md
 - **Timestamp**: 2026-07-30 UTC
 - **Change**: Per explicit user clarification ("Tailscale path is not compulsory. Users

@@ -5,6 +5,50 @@
 
 ---
 
+### [2026-07-30-007] install.sh hard-crashed with no fallback on any host without systemd as PID 1
+- **Timestamp**: 2026-07-30 UTC
+- **Summary**: Found via a real, zero-context sub-agent validation test (fresh Ubuntu
+  26.04 Docker container, given only the install one-liner and told to follow nothing
+  but the tool's own `--help`/stdout, per the user's explicit "validate self-
+  explanatoriness" request). The installer got all the way through cloning, `npm ci`,
+  and nginx config before hard-crashing at `systemctl daemon-reload` with
+  `bash: line 299: systemctl: command not found`, exit code 127 under `set -e`, with
+  **zero output printed afterward** — no partial summary, no manual-start hint, nothing.
+  `install.sh --help` also documented no flag/env var for this case. A container/minimal-
+  image target with no init system is not an edge case — it's a completely normal "fresh
+  machine" for exactly the kind of one-command install this script advertises.
+- **Root cause**: `install.sh`'s service-configuration step (`systemctl daemon-reload`,
+  `systemctl enable --now nomadtty`, `systemctl reload nginx`) assumed systemd is always
+  running as PID 1 with no detection or fallback at all.
+- **Affected files**: `install.sh`.
+- **Detection method**: real end-to-end sub-agent run against a genuinely fresh
+  container, not a code read — the bug was invisible to `shellcheck`/review since the
+  script is syntactically fine, it just has an unconditional systemd dependency.
+- **Correction**: `install.sh` now detects PID-1 systemd (`command -v systemctl` AND
+  `/run/systemd/system` existing — the former alone is insufficient, since the binary can
+  be present via a base image's package set with no init actually running) and falls back
+  to `start-stop-daemon` (part of `dpkg`, always present on Debian/Ubuntu) for process
+  management: start/stop/idempotent-restart, privilege drop to `NOMADTTY_USER`, and a
+  PID file at `/var/run/nomadtty.pid`. Verified empirically in this sandbox before
+  committing: (1) env vars exported into the installer's own shell before calling
+  `start-stop-daemon --chuid` ARE inherited by the started process; (2) only a *single*
+  `exec node server/main.js >>log 2>&1` with no trailing shell statements keeps the
+  spawned process at the exact PID recorded in the pidfile — a compound `cmd1; cmd2`
+  script forks an extra, untracked child for the final command instead; (3) a full
+  install run, an idempotent re-run (old process cleanly stopped, new one started, token
+  preserved), and a real MCP `initialize` → `create_session` round trip all passed
+  end-to-end in a fresh container. nginx also needed an explicit first-start (`nginx`) vs.
+  `nginx -s reload` on re-runs, since minimal container images' package postinst scripts
+  commonly skip auto-starting services (`policy-rc.d`).
+- **Prevention rule**: Any installer step that assumes a specific init system/service
+  manager must detect it first and provide a real, tested fallback — not just document
+  the assumption. Verify process-management primitives (env inheritance across a
+  privilege-drop, PID tracking through an exec chain, redirection under `--background`)
+  empirically in a real disposable container before trusting them, rather than assuming
+  standard-sounding tool behavior from memory.
+
+---
+
 ### [2026-07-30-006] Five "known pre-existing flaky/failing" tests were treated as environment noise instead of being root-caused — all had real, fixable causes
 - **Timestamp**: 2026-07-30 UTC
 - **Summary**: Two tests (`list_active_ports`, the Hist/copy-mode test) had been confirmed
