@@ -15,6 +15,36 @@
 
 ---
 
+### [2026-07-30] Multi-user/multi-tenant access control explicitly declined — open LAN access is the intended model
+- **Context**: `docs/competitive-analysis.md`'s backlog (item 11) flagged the lack of
+  per-user accounts/roles as "the one structural gap versus Cockpit/code-server-class
+  tools" and asked whether to build one. Rather than design and implement an auth/
+  accounts subsystem unilaterally — a genuine new product surface (user store, login
+  sessions, per-session ownership, UI/API/MCP changes), unlike every other item in the
+  backlog which was a fix or a hardening pass on existing behavior — the user was asked
+  directly via `AskUserQuestion` to scope it first.
+- **Decision**: No multi-user access control will be built. The user's explicit answer:
+  "Multiuser access control is nothing. Users over lan can access nomadTTY sessions over
+  the webapp and through agents (mcp)... We dont want auth." The current model — anyone
+  reachable on the LAN (or wherever the operator has exposed it, e.g. via Tailscale) can
+  use the Session Manager UI and, with the MCP bearer token, the MCP server — is the
+  intended design, not an oversight to close.
+- **Alternatives considered**: A shared admin login (proper login page + session
+  cookie, everyone sees the same sessions) and real per-person accounts (private
+  sessions, user store, ownership checks through the Session Manager API and MCP tools)
+  were both offered as options and explicitly declined in favor of no change.
+- **Rationale**: NomadTTY's existing security model (documented in SECURITY.md) already
+  treats network-level access control (Tailscale/VPN, optional `NOMADTTY_BASIC_AUTH`,
+  the MCP bearer token) as the boundary, not per-user identity — this decision confirms
+  that model matches actual intended usage rather than being an unaddressed gap.
+- **Consequences**: `docs/competitive-analysis.md`'s backlog item 11 and
+  `docs/ai/project-overview.md`'s matching TODO are both closed as "declined by explicit
+  user decision," not "not yet implemented" — a future session should not re-propose
+  building this without the user raising it again themselves.
+- **Owner**: user (explicit, direct answer via `AskUserQuestion`).
+
+---
+
 ### [2026-07-30] Docker base image switched from ubuntu:26.04 to alpine:3.20 (~4x smaller); CI gained nginx-config and Playwright jobs
 - **Context**: The competitive-analysis backlog's item 20 asked to re-evaluate a smaller
   base image "now that ttyd's apt availability is confirmed" — but that framing itself

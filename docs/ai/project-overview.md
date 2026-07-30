@@ -178,8 +178,10 @@ NOTICE                     — third-party license attributions (required)
   archives generally retain only the current version, so a hard pin risks the build
   breaking outright once the archive rotates, a worse failure mode than an unpinned
   "floating latest"). Actual versions recorded in the Stack table above instead.
-- TODO: real multi-user/multi-tenant access control (named sessions are not per-user
-  accounts) — tracked in `docs/competitive-analysis.md`'s backlog, not yet implemented.
+- **Declined (2026-07-30, explicit user decision):** multi-user/multi-tenant access
+  control. Open LAN/Tailscale access to the webapp and MCP is the intended model, not a
+  gap — see `docs/ai/decision-log.md`'s matching entry. Do not re-propose without the
+  user raising it again.
 - TODO: `Content-Security-Policy` nginx header (SECURITY.md's Low-priority item) —
   deliberately deferred, needs compatibility testing against kb.js's inline WS hook and
   ttyd's bundled xterm.js before enabling.
