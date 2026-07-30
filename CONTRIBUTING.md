@@ -58,6 +58,14 @@ Longer explanation if needed.
 
 Types: `feat`, `fix`, `chore`, `docs`, `refactor`. Scope examples: `kb.js`, `nginx`, `install`, `docker`.
 
+## License
+
+NomadTTY is licensed under [PolyForm Shield 1.0.0](https://polyformproject.org/licenses/shield/1.0.0)
+(see [LICENSE](LICENSE)) — free for any use except building a competing product or
+service. By submitting a pull request, you agree your contribution is licensed under
+these same terms and that the project maintainer may distribute it as part of NomadTTY
+under this or a future license for the project.
+
 ## Security issues
 
 Do **not** open a public issue for security vulnerabilities. See [SECURITY.md](SECURITY.md).

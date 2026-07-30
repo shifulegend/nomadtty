@@ -15,6 +15,66 @@
 
 ---
 
+### [2026-07-30] Relicensed from MIT to PolyForm Shield 1.0.0
+- **Context**: User wanted to protect against someone taking NomadTTY and launching a
+  competing hosted product/service built on it, while explicitly not wanting to block
+  the self-hosted/homelab audience (including people using it at a day job) that MIT
+  already served well. `git log` was checked for prior contributors before considering
+  this: every commit in this repo's history is from the owner's own tooling (AI coding
+  sessions) or `dependabot[bot]` — no independent third-party human contributions exist,
+  so the owner holds full copyright and can relicense unilaterally with no CLA gap.
+- **Decision**: Adopted [PolyForm Shield 1.0.0](https://polyformproject.org/licenses/shield/1.0.0)
+  verbatim (fetched and verified against the authoritative plain-text source at
+  `https://polyformproject.org/licenses/shield/1.0.0.txt`, not reconstructed from memory),
+  with a `Required Notice: Copyright (c) 2026 shifulegend` line appended per the
+  license's own `Notices` clause. No expiry/auto-conversion — permanent, not
+  Business-Source-License-style.
+- **Alternatives considered**:
+  - **PolyForm Noncommercial 1.0.0** — rejected: its definition of "noncommercial" is
+    broad enough to exclude any use in the course of business operations at all
+    (e.g. an engineer self-hosting it for their own work), which is stricter than the
+    actual goal and would alienate exactly the audience this project targets.
+  - **Business Source License (BSL)**, with a future auto-conversion date to a
+    permissive license — offered as an option (permanent-restriction vs.
+    auto-converts-later was asked explicitly via `AskUserQuestion`); user chose permanent.
+  - **Staying on MIT** — rejected per the original ask: MIT has no mechanism to prevent
+    a hosted-competitor fork.
+- **Rationale**: PolyForm Shield's "Noncompete" clause (§Noncompete/§Competition in the
+  license text) permits literally any use — including internal business use, forking,
+  and modification — except providing a product/service that competes with NomadTTY or
+  with the licensor's own use of it. That's precisely the "protect against a competing
+  hosted fork, nothing else" scope the user described, without the Noncommercial
+  license's much broader business-use restriction.
+- **Consequences**:
+  - **Not retroactive**: anyone who already cloned/forked the repo while it was MIT
+    keeps a perpetual MIT license for that historical code — this change only governs
+    the current and future state of the repo, not past distributions.
+  - **Not OSI-approved**: PolyForm Shield has no field-of-use-neutral clause (fails
+    OSD criterion #6, "No Discrimination Against Fields of Endeavor" — see the
+    conversation's own analysis of why no OSI-approved license is genuinely
+    equivalent), so GitHub's license detector and OSS directories that require
+    OSI-approved licenses (e.g. awesome-selfhosted-style lists) may no longer surface
+    this project the same way MIT did.
+  - **No SPDX identifier exists for Shield** (checked against the live
+    `spdx/license-list-data` registry — only `PolyForm-Noncommercial-1.0.0` and
+    `PolyForm-Small-Business-1.0.0` have real SPDX IDs), so `package.json` uses
+    `"license": "SEE LICENSE IN LICENSE"` (npm's own documented convention for this
+    case) rather than an invented/incorrect SPDX string.
+  - **No conflict with bundled third-party components**: ttyd (MIT), xterm.js (MIT),
+    tmux (ISC), nginx (BSD-2) are invoked as separate processes, not statically linked,
+    and dnsmasq (GPLv2) is already documented as optional/not-bundled — none of their
+    terms require the surrounding project to share a compatible license, so nothing
+    about `NOTICE` needed to change.
+  - Files updated: `LICENSE` (full text replacement), `README.md` (badge + License
+    section), `package.json` (added `license` field, previously absent), `CONTRIBUTING.md`
+    (added a License section covering future contributions), `docs/articles/hashnode-nomadtty.md`
+    (updated the local copy's license mention — the already-published live Hashnode post
+    is a separate, external artifact this doesn't touch), `CHANGELOG.md`.
+- **Owner**: user decision, made via direct discussion and a follow-up `AskUserQuestion`
+  on the permanent-vs-auto-converting question.
+
+---
+
 ### [2026-07-30] Zero-context tailnet-hosting validation (sub-agent 2) skipped — sandbox network policy blocks Tailscale, not a NomadTTY issue
 - **Context**: After sub-agent 1's local-hosting validation passed (see the matching
   entry below), the user's original request called for a second zero-context sub-agent

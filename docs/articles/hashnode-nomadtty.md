@@ -343,7 +343,9 @@ docker run -d -p 80:80 --name nomadtty ghcr.io/shifulegend/nomadtty:latest
 curl -fsSL https://raw.githubusercontent.com/shifulegend/nomadtty/main/install.sh | sudo bash
 ```
 
-MIT licensed. Contributions welcome — see [CONTRIBUTING.md](https://github.com/shifulegend/nomadtty/blob/main/CONTRIBUTING.md).
+Licensed under [PolyForm Shield 1.0.0](https://polyformproject.org/licenses/shield/1.0.0) — free for any
+use except building a competing product/service. Contributions welcome — see
+[CONTRIBUTING.md](https://github.com/shifulegend/nomadtty/blob/main/CONTRIBUTING.md).
 
 ---
 

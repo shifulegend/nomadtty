@@ -7,6 +7,16 @@ and this project's version scheme follows [Semantic Versioning](https://semver.o
 
 ## [Unreleased]
 
+### Changed
+- **Breaking (licensing)**: NomadTTY is now licensed under [PolyForm Shield
+  1.0.0](https://polyformproject.org/licenses/shield/1.0.0) instead of MIT —
+  free for any use, including at a company, except building a competing
+  product or service using NomadTTY. This does not affect any prior version
+  already distributed under MIT (that grant isn't retroactive), and does not
+  change the licensing of bundled/adjacent third-party components (ttyd,
+  xterm.js, tmux, nginx — see `NOTICE`), which remain under their own
+  original licenses. See `docs/ai/decision-log.md` for the full rationale.
+
 ### Fixed
 - **Critical**: `install.sh` hard-crashed (`systemctl: command not found`, no
   fallback) on any host without systemd as PID 1 — a completely ordinary target

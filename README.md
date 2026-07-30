@@ -1,7 +1,7 @@
 # NomadTTY
 
 [![CI](https://github.com/shifulegend/nomadtty/actions/workflows/ci.yml/badge.svg)](https://github.com/shifulegend/nomadtty/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: PolyForm Shield 1.0.0](https://img.shields.io/badge/License-PolyForm_Shield_1.0.0-blue.svg)](https://polyformproject.org/licenses/shield/1.0.0)
 [![Docker Image](https://ghcr-badge.egpl.dev/shifulegend/nomadtty/size)](https://ghcr.io/shifulegend/nomadtty)
 
 **A mobile-friendly, agent-friendly web terminal you can access from anywhere.**
@@ -1008,6 +1008,12 @@ changes between releases.
 
 ## License
 
-NomadTTY itself is MIT licensed. See [LICENSE](LICENSE).
+NomadTTY itself is licensed under [PolyForm Shield 1.0.0](https://polyformproject.org/licenses/shield/1.0.0)
+— see [LICENSE](LICENSE). In plain terms: you're free to use, self-host, modify, and
+distribute NomadTTY for any purpose, including at a company, **except** to build a
+product or service that competes with NomadTTY itself. This is a source-available
+license, not an OSI-approved open-source one — see `docs/ai/decision-log.md` for the
+reasoning behind the switch from MIT.
 
-Third-party components (ttyd, xterm.js, tmux, nginx) are credited in [NOTICE](NOTICE).
+Third-party components (ttyd, xterm.js, tmux, nginx) are credited in [NOTICE](NOTICE)
+and remain under their own original licenses regardless of NomadTTY's own license.
