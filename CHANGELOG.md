@@ -8,6 +8,12 @@ and this project's version scheme follows [Semantic Versioning](https://semver.o
 ## [Unreleased]
 
 ### Fixed
+- `server/mcp/tmux.js`'s `list_active_ports` tool returned an empty list on any host
+  without `ss`/`netstat` installed instead of surfacing an error — added a pure-Node
+  `/proc/net/{tcp,udp}{,6}` parsing fallback.
+- `src/kb.js`'s touch-scroll (Hist mode) sent one unthrottled request per touchmove
+  step, causing real latency/responsiveness problems on a fast swipe — now coalesces
+  pending scroll amounts into at most one in-flight request.
 - **Critical**: `Dockerfile` and `install.sh` served `502 Bad Gateway` on every
   request — nginx had been pointed at the Node Session Manager (`:4000`)
   since an earlier commit, but the Docker/install paths still ran raw `ttyd`

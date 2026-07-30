@@ -16,6 +16,7 @@
 'use strict';
 
 const { execFileSync } = require('child_process');
+const fs = require('fs');
 
 function tmux(args) {
   return execFileSync('tmux', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
@@ -264,18 +265,153 @@ function processTree(rootPid) {
   return result;
 }
 
-/** Listening sockets host-wide, via `ss` (present on any NomadTTY host — iproute2 is a base package). */
+/** Reverses byte order of a hex string 2 chars at a time — /proc/net/tcp{,6}
+ * store each address word in host (little-endian on every real Linux target)
+ * byte order, not network byte order. */
+function reverseHexBytes(hex) {
+  let out = '';
+  for (let i = hex.length - 2; i >= 0; i -= 2) out += hex.slice(i, i + 2);
+  return out;
+}
+
+/** "0100007F" (4-byte hex, little-endian) -> "127.0.0.1". */
+function hexToIPv4(hex) {
+  const be = reverseHexBytes(hex);
+  const bytes = [];
+  for (let i = 0; i < be.length; i += 2) bytes.push(parseInt(be.slice(i, i + 2), 16));
+  return bytes.join('.');
+}
+
+/** 32-hex-char IPv6 address (4 little-endian 32-bit words) -> standard hex-group form. */
+function hexToIPv6(hex) {
+  let bytesHex = '';
+  for (let i = 0; i < 32; i += 8) bytesHex += reverseHexBytes(hex.slice(i, i + 8));
+  const groups = [];
+  for (let i = 0; i < bytesHex.length; i += 4) groups.push(bytesHex.slice(i, i + 4));
+  return groups.join(':');
+}
+
+/** Parses one line of /proc/net/{tcp,udp}{,6} into {localAddress, localPort, inode},
+ * or null for a malformed/header line. TCP callers filter to state 0A (LISTEN);
+ * UDP has no equivalent concept, so every bound entry counts as "listening". */
+function parseProcNetLine(line, isV6) {
+  const cols = line.trim().split(/\s+/);
+  if (cols.length < 10) return null;
+  const [addrHex, portHex] = (cols[1] || '').split(':');
+  if (!addrHex || !portHex) return null;
+  return {
+    localAddress: isV6 ? hexToIPv6(addrHex) : hexToIPv4(addrHex),
+    localPort: parseInt(portHex, 16),
+    state: cols[3],
+    inode: cols[9],
+  };
+}
+
+/** Best-effort inode -> {pid, command} map, built by walking /proc/<pid>/fd/*
+ * looking for "socket:[<inode>]" symlinks — the same source `ss -p` itself
+ * ultimately reads, used here because this fallback path exists specifically
+ * for hosts where `ss`/`netstat` (iproute2/net-tools) aren't installed at all.
+ * Every failure (a process's fd directory not readable, a race where an fd
+ * disappears mid-scan, etc.) is swallowed per-entry: this is strictly
+ * best-effort attribution, not required for a socket to be reported. */
+function buildInodeToProcessMap() {
+  const map = new Map();
+  let pids;
+  try {
+    pids = fs.readdirSync('/proc').filter((p) => /^\d+$/.test(p));
+  } catch (_e) {
+    return map;
+  }
+  for (const pid of pids) {
+    let fdNames;
+    try {
+      fdNames = fs.readdirSync(`/proc/${pid}/fd`);
+    } catch (_e) {
+      continue; // not our process / already exited / no permission
+    }
+    let matched = false;
+    for (const fd of fdNames) {
+      let target;
+      try {
+        target = fs.readlinkSync(`/proc/${pid}/fd/${fd}`);
+      } catch (_e) {
+        continue;
+      }
+      const m = /^socket:\[(\d+)\]$/.exec(target);
+      if (!m) continue;
+      matched = true;
+      if (!map.has(m[1])) {
+        let command = null;
+        try {
+          command = fs.readFileSync(`/proc/${pid}/comm`, 'utf8').trim();
+        } catch (_e) {
+          // process gone between readdir and here; leave command null
+        }
+        map.set(m[1], { pid: Number(pid), command });
+      }
+    }
+    if (matched) continue;
+  }
+  return map;
+}
+
+/** Pure-Node fallback for listeningSockets() when `ss` isn't available —
+ * reads /proc/net/{tcp,tcp6,udp,udp6} directly. Every Linux host exposes
+ * these regardless of whether iproute2/net-tools happen to be installed, so
+ * this has no external-binary dependency at all. */
+function listeningSocketsViaProcfs({ protocol = 'all' } = {}) {
+  const results = [];
+  const wantTcp = protocol === 'tcp' || protocol === 'all';
+  const wantUdp = protocol === 'udp' || protocol === 'all';
+  const sources = [
+    ...(wantTcp ? [['tcp', '/proc/net/tcp', false], ['tcp', '/proc/net/tcp6', true]] : []),
+    ...(wantUdp ? [['udp', '/proc/net/udp', false], ['udp', '/proc/net/udp6', true]] : []),
+  ];
+
+  let inodeMap = null; // built lazily, only if at least one socket is found
+  for (const [proto, path, isV6] of sources) {
+    let content;
+    try {
+      content = fs.readFileSync(path, 'utf8');
+    } catch (_e) {
+      continue; // e.g. no IPv6 support on this host — /proc/net/tcp6 absent
+    }
+    const lines = content.split('\n').slice(1).filter(Boolean);
+    for (const line of lines) {
+      const parsed = parseProcNetLine(line, isV6);
+      if (!parsed) continue;
+      if (proto === 'tcp' && parsed.state !== '0A') continue; // not LISTEN
+      if (!inodeMap) inodeMap = buildInodeToProcessMap();
+      const owner = inodeMap.get(parsed.inode);
+      results.push({
+        protocol: proto,
+        localAddress: parsed.localAddress,
+        localPort: parsed.localPort,
+        process: owner ? owner.command : null,
+        pid: owner ? owner.pid : null,
+      });
+    }
+  }
+  return results;
+}
+
+/** Listening sockets host-wide. Tries `ss` first (present on most Linux
+ * hosts — iproute2 is a base package); falls back to parsing
+ * /proc/net/{tcp,udp}{,6} directly on hosts where `ss`/`netstat` aren't
+ * installed, rather than silently reporting zero sockets found. */
 function listeningSockets({ protocol = 'all' } = {}) {
   const flags = [];
   if (protocol === 'tcp' || protocol === 'all') flags.push('-tlnp');
   if (protocol === 'udp' || protocol === 'all') flags.push('-ulnp');
 
   const results = [];
+  let ssAvailable = true;
   for (const flag of flags) {
     let out;
     try {
       out = execFileSync('ss', ['-H', flag], { encoding: 'utf8' });
     } catch (_e) {
+      ssAvailable = false;
       continue; // ss unavailable or no permission for -p on some sockets; best-effort.
     }
     const proto = flag.startsWith('-t') ? 'tcp' : 'udp';
@@ -293,6 +429,7 @@ function listeningSockets({ protocol = 'all' } = {}) {
       });
     }
   }
+  if (!ssAvailable && results.length === 0) return listeningSocketsViaProcfs({ protocol });
   return results;
 }
 
