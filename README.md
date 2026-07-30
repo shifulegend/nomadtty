@@ -527,6 +527,10 @@ npm install
 MCP_AUTH_TOKEN=$(openssl rand -hex 32) node server/main.js
 ```
 
+For a persistent local config instead of inline env vars, copy
+[`.env.example`](.env.example) to `.env`, fill it in, then
+`set -a; source .env; set +a; node server/main.js`.
+
 This starts two listeners in one process:
 
 | Listener | Default bind | Purpose |

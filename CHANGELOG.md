@@ -13,6 +13,12 @@ and this project's version scheme follows [Semantic Versioning](https://semver.o
   since an earlier commit, but the Docker/install paths still ran raw `ttyd`
   standalone on the old port. Both now install Node.js and run
   `server/main.js` (Session Manager + MCP), matching production.
+- `install.sh` re-runs now preserve `NOMADTTY_HOST`/`NOMADTTY_TLS`/
+  `NOMADTTY_BASIC_AUTH`/etc. instead of silently resetting them to defaults
+  unless re-supplied identically every time.
+- `install.sh`'s health check could silently abort the whole script under
+  `set -e` before ever printing its own diagnostic output, on any real
+  connection failure.
 - `install.sh`'s new `NOMADTTY_BASIC_AUTH` htpasswd file was unreadable by
   nginx's `www-data` worker process, causing every request to `500` instead
   of enforcing auth. Fixed with `chown root:www-data`.
@@ -28,6 +34,8 @@ and this project's version scheme follows [Semantic Versioning](https://semver.o
 - `install.sh` optional nginx Basic Auth via `NOMADTTY_BASIC_AUTH=user:password`.
 - `nginx/ttyd.conf` now rate-limits the terminal endpoint by default
   (`limit_req_zone`/`limit_req`, 10r/s burst 20).
+- `.env.example` documenting every `server/**` runtime env var, for developers
+  running `node server/main.js` directly without `install.sh`.
 - `install.sh --help`/`--version` and `node server/main.js --help`/`--version`.
 - `docker-entrypoint.sh` auto-generates `MCP_AUTH_TOKEN` per container start
   if not supplied, printing it once via `docker logs`.

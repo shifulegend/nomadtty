@@ -90,8 +90,32 @@ esac
 
 set -euo pipefail
 
-NOMADTTY_HOST="${NOMADTTY_HOST:-}"
-NOMADTTY_USER="${NOMADTTY_USER:-${SUDO_USER:-$(id -un)}}"
+NGINX_CONF="/etc/nginx/sites-available/nomadtty"
+SERVICE_FILE="/etc/systemd/system/nomadtty.service"
+ENV_DIR="/etc/nomadtty"
+ENV_FILE="$ENV_DIR/nomadtty.env"
+HTPASSWD_FILE="/etc/nginx/nomadtty.htpasswd"
+
+# ── Read a previous install's settings as fallback defaults ─────────────────
+# Makes re-running install.sh with NO env vars a true no-op that repeats the
+# previous configuration (custom host, TLS, Basic Auth, etc.) instead of
+# silently resetting everything but MCP_AUTH_TOKEN back to defaults — the
+# single config surface this file represents is meant to be the durable
+# record, not just a one-shot set of flags that must be re-supplied
+# identically on every re-run.
+_stored() {
+    if [ -f "$ENV_FILE" ]; then
+        grep "^$1=" "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true
+    fi
+}
+STORED_NOMADTTY_HOST="$(_stored NOMADTTY_HOST)"
+STORED_NOMADTTY_USER="$(_stored NOMADTTY_USER)"
+STORED_NOMADTTY_TLS="$(_stored NOMADTTY_TLS)"
+STORED_NOMADTTY_TLS_EMAIL="$(_stored NOMADTTY_TLS_EMAIL)"
+STORED_NOMADTTY_BASIC_AUTH="$(_stored NOMADTTY_BASIC_AUTH)"
+
+NOMADTTY_HOST="${NOMADTTY_HOST:-${STORED_NOMADTTY_HOST:-}}"
+NOMADTTY_USER="${NOMADTTY_USER:-${STORED_NOMADTTY_USER:-${SUDO_USER:-$(id -un)}}}"
 INSTALL_DIR="${NOMADTTY_INSTALL_DIR:-/opt/nomadtty}"
 BRANCH="${NOMADTTY_BRANCH:-main}"
 REPO_URL="${NOMADTTY_REPO_URL:-https://github.com/shifulegend/nomadtty.git}"
@@ -99,14 +123,9 @@ LOCAL_SOURCE="${NOMADTTY_LOCAL_SOURCE:-}"
 MCP_PORT="${MCP_PORT:-4200}"
 MCP_HOST="${MCP_HOST:-0.0.0.0}"
 SESSION_MANAGER_PORT="${SESSION_MANAGER_PORT:-4000}"
-NOMADTTY_TLS="${NOMADTTY_TLS:-none}"
-NOMADTTY_TLS_EMAIL="${NOMADTTY_TLS_EMAIL:-}"
-NOMADTTY_BASIC_AUTH="${NOMADTTY_BASIC_AUTH:-}"
-NGINX_CONF="/etc/nginx/sites-available/nomadtty"
-SERVICE_FILE="/etc/systemd/system/nomadtty.service"
-ENV_DIR="/etc/nomadtty"
-ENV_FILE="$ENV_DIR/nomadtty.env"
-HTPASSWD_FILE="/etc/nginx/nomadtty.htpasswd"
+NOMADTTY_TLS="${NOMADTTY_TLS:-${STORED_NOMADTTY_TLS:-none}}"
+NOMADTTY_TLS_EMAIL="${NOMADTTY_TLS_EMAIL:-${STORED_NOMADTTY_TLS_EMAIL:-}}"
+NOMADTTY_BASIC_AUTH="${NOMADTTY_BASIC_AUTH:-${STORED_NOMADTTY_BASIC_AUTH:-}}"
 
 # ── Require root ────────────────────────────────────────────────────────────
 if [ "$(id -u)" -ne 0 ]; then
@@ -253,6 +272,13 @@ MCP_AUTH_TOKEN=$MCP_AUTH_TOKEN
 MCP_PORT=$MCP_PORT
 MCP_HOST=$MCP_HOST
 SESSION_MANAGER_PORT=$SESSION_MANAGER_PORT
+# install.sh-only settings, persisted here so a bare re-run (no env vars)
+# repeats this configuration instead of resetting it — see .claude/rules/config.md.
+NOMADTTY_HOST=$NOMADTTY_HOST
+NOMADTTY_USER=$NOMADTTY_USER
+NOMADTTY_TLS=$NOMADTTY_TLS
+NOMADTTY_TLS_EMAIL=$NOMADTTY_TLS_EMAIL
+NOMADTTY_BASIC_AUTH=$NOMADTTY_BASIC_AUTH
 EOF
 chmod 600 "$ENV_FILE"
 
@@ -301,10 +327,18 @@ echo "==> Verifying deployment..."
 LOCAL_IP="$(hostname -I | awk '{print $1}')"
 sleep 2   # give the backend a moment to start
 
+# "|| true" ensures this assignment itself never fails: under `set -e`, a bare
+# `VAR="$(cmd)"` DOES abort the script if cmd exits non-zero (e.g. curl's own
+# "connection refused" exit code) -- which would otherwise skip the
+# WARNING/troubleshooting output below and the whole final summary, silently
+# defeating the point of a health check (found while verifying this script
+# against a container with no nginx/backend actually running yet). curl's
+# `-w "%{http_code}"` already prints "000" on its own when no response code
+# was received, so appending another literal here would double it up.
 if [ -n "$NOMADTTY_BASIC_AUTH" ]; then
-    HTTP_STATUS="$(curl -s -o /dev/null -w "%{http_code}" -u "$NOMADTTY_BASIC_AUTH" "http://127.0.0.1/")"
+    HTTP_STATUS="$(curl -s -o /dev/null -w "%{http_code}" -u "$NOMADTTY_BASIC_AUTH" "http://127.0.0.1/" || true)"
 else
-    HTTP_STATUS="$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1/")"
+    HTTP_STATUS="$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1/" || true)"
 fi
 if [ "$HTTP_STATUS" = "200" ]; then
     echo "    HTTP 200 OK — Session Manager is responding."
