@@ -61,8 +61,23 @@ function getPaneInfo(tmuxName) {
   return { historySize, width, height, pid, cursorY };
 }
 
+/**
+ * `-J` rejoins tmux's own wrapped display lines (tmux tracks which rows
+ * wrapped from the previous one) back into single logical lines, instead of
+ * emitting a `\n` after every physical row regardless of wrapping. Without
+ * it, any captured text longer than the pane's column width -- e.g. a long
+ * marker string, or its echoed input -- silently splits across two or more
+ * "lines" in the plain-text output, breaking any check that requires it to
+ * appear as one complete line (outputHasOwnLine() in
+ * tests/helpers/mcp-client.js, and the analogous waitForOutputLine() in
+ * tests/helpers/ws-capture.js) even though nothing is actually wrong with
+ * the terminal or the command that ran. Purely a text-formatting flag --
+ * it does not change which rows `-S`/`-E` address, so every existing
+ * cursor_y/history_size-anchored range computed elsewhere in this file
+ * stays correct.
+ */
 function capturePane(tmuxName, { ansi = false, start, end } = {}) {
-  const args = ['capture-pane', '-t', tmuxName, '-p'];
+  const args = ['capture-pane', '-t', tmuxName, '-p', '-J'];
   if (ansi) args.push('-e');
   if (start !== undefined) args.push('-S', String(start));
   if (end !== undefined) args.push('-E', String(end));
