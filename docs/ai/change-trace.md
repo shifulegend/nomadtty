@@ -3,7 +3,21 @@
 <!-- last updated: 2026-07-30 -->
 <!-- add an entry for every notable change: what, why, affected areas, commit -->
 
-### [2026-07-30] Root-caused and fixed all 5 "known flaky/pre-existing" test failures — real 63/63
+### [2026-07-30] Clarified Tailscale is optional, not compulsory, in README/SECURITY.md
+- **Timestamp**: 2026-07-30 UTC
+- **Change**: Per explicit user clarification ("Tailscale path is not compulsory. Users
+  may choose without tailscale (normal lan) or local hosting"), reworded README.md's
+  Security Posture section, its architecture diagram's client-side label, and its
+  Tailscale Setup section preface, plus SECURITY.md's security-model bullet and
+  hardening table row, so a trusted-LAN or purely-local (loopback-only) deployment reads
+  as an equally valid, first-class choice — not a fallback for people who "don't use
+  Tailscale yet." No underlying security model changed (Tailscale was already optional
+  in practice, per `docs/ai/decision-log.md`'s earlier "open LAN/Tailscale access is the
+  intended model" entry) — this is a wording fix so the docs actually say what was
+  already true. Also fixed a stale `ubuntu:24.04` reference in SECURITY.md's Dependabot
+  section (should have read `alpine:3.20` since this session's earlier base-image
+  switch).
+- **Affected areas**: `README.md`, `SECURITY.md`.
 - **Timestamp**: 2026-07-30 UTC
 - **Change**: Per explicit user instruction ("no preexisting errors are to be left
   unfixed"), investigated and fixed all five tests previously documented as flaky or
