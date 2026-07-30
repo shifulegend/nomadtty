@@ -987,7 +987,8 @@ conventions, and pull request requirements.
 Security issues go through [SECURITY.md](SECURITY.md) — please use private advisories,
 not public issues.
 
-For help, see [SUPPORT.md](SUPPORT.md).
+For help, see [SUPPORT.md](SUPPORT.md). See [CHANGELOG.md](CHANGELOG.md) for notable
+changes between releases.
 
 ---
 

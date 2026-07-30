@@ -36,6 +36,7 @@ Do not let durable knowledge live only inside one tool's native files.
 | `SECURITY.md` | Security model, supported versions, disclosure process |
 | `CODE_OF_CONDUCT.md` | Community behaviour standards |
 | `SUPPORT.md` | How to get help, support model |
+| `CHANGELOG.md` | Keep a Changelog format — update its `[Unreleased]` section for every notable change, same trigger as `docs/ai/change-trace.md` |
 | `.github/CODEOWNERS` | Review routing — update if ownership changes |
 | `.github/workflows/ci.yml` | CI jobs — update when new lint/test targets are added |
 

@@ -44,6 +44,50 @@
 #                         Independent of MCP_AUTH_TOKEN, which always protects
 #                         the MCP server regardless of this setting.
 
+NOMADTTY_INSTALLER_VERSION="0.2.0"   # keep in sync with package.json's "version"
+
+# --help/--version are handled before touching the system, with the text
+# embedded here (not re-read from "$0") since this script is normally run via
+# `curl ... | bash`, where "$0" is the shell, not a readable script file.
+case "${1:-}" in
+    -h|--help)
+        cat <<'USAGE'
+NomadTTY installer — Debian/Ubuntu
+
+  curl -fsSL https://raw.githubusercontent.com/shifulegend/nomadtty/main/install.sh | sudo bash
+
+Installs the Session Manager + MCP backend: a mobile-friendly web terminal
+with persistent multi-session support and an MCP server for AI-agent
+terminal access.
+
+Options are environment variables, e.g.:
+
+  curl -fsSL .../install.sh | sudo NOMADTTY_HOST=terminal.example.com bash
+
+  NOMADTTY_HOST          nginx server_name (default: any hostname)
+  NOMADTTY_USER          OS user to run the backend as (default: sudo user)
+  NOMADTTY_INSTALL_DIR   where the app is installed (default: /opt/nomadtty)
+  NOMADTTY_BRANCH        git branch/tag to install (default: main)
+  NOMADTTY_REPO_URL      git remote to clone from
+  NOMADTTY_LOCAL_SOURCE  install from a local checkout instead of cloning
+  MCP_AUTH_TOKEN         MCP bearer token (default: auto-generated, preserved)
+  MCP_PORT               MCP server port (default: 4200)
+  MCP_HOST               MCP server bind address (default: 0.0.0.0)
+  SESSION_MANAGER_PORT   Session Manager port (default: 4000)
+  NOMADTTY_TLS           "none" (default) or "certbot" for automatic HTTPS
+  NOMADTTY_TLS_EMAIL     contact email, required with NOMADTTY_TLS=certbot
+  NOMADTTY_BASIC_AUTH    "user:password" — adds nginx Basic Auth
+
+Full documentation: https://github.com/shifulegend/nomadtty#readme
+USAGE
+        exit 0
+        ;;
+    --version)
+        echo "NomadTTY installer $NOMADTTY_INSTALLER_VERSION"
+        exit 0
+        ;;
+esac
+
 set -euo pipefail
 
 NOMADTTY_HOST="${NOMADTTY_HOST:-}"

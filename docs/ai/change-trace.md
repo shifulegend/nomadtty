@@ -3,6 +3,31 @@
 <!-- last updated: 2026-07-30 -->
 <!-- add an entry for every notable change: what, why, affected areas, commit -->
 
+### [2026-07-30] Added --help/--version to install.sh and server/main.js; added CHANGELOG.md; small Session Manager UI copy/tooltip improvements
+- **Timestamp**: 2026-07-30 UTC
+- **Change**: `install.sh -h|--help|--version` now prints usage/version and exits before
+  touching the system (embedded text, not re-read from `$0`, so it works whether the
+  script is piped via `curl | bash` or run as a local file). `node server/main.js
+  -h|--help|--version` does the same, checked before `require`-ing `session-manager`/
+  `mcp` (which have port-binding side effects). Added `CHANGELOG.md` (Keep a Changelog
+  format), linked from README and tracked in `docs/ai/tool-sync-policy.md`'s community
+  health files table. `public/session-manager.html`/`.js` gained a `title` tooltip on
+  the Create/Join/Close buttons and richer empty-state copy (matching Uptime Kuma/
+  Portainer's lightweight pattern researched in the competitive analysis) — no
+  full onboarding tour.
+- **Rationale**: Closes the documentation/help gaps identified in the competitive
+  analysis: `--help`/`--version` is a GNU-standards baseline every comparator CLI met
+  and NomadTTY had a confirmed hard zero of; CHANGELOG.md is common in this tier though
+  not universal; in-product help was previously a single empty-state string.
+- **Affected areas**: `install.sh`, `server/main.js`, `CHANGELOG.md` (new), `README.md`,
+  `CONTRIBUTING.md`, `docs/ai/tool-sync-policy.md`, `public/session-manager.html`,
+  `public/session-manager.js`.
+- **Verification**: `shellcheck install.sh` passes; `install.sh --help`/`--version`
+  tested both piped (`cat install.sh | bash -s -- --help`) and as a local file;
+  `node server/main.js --help`/`--version` tested, and normal boot (with
+  `MCP_AUTH_TOKEN` set) confirmed still starts both listeners unchanged. Full Playwright
+  suite: 61/63 (same 2 pre-existing failures as the prior commit, not new).
+
 ### [2026-07-30] install.sh: opt-in TLS (Certbot), Basic Auth, and default nginx rate limiting
 - **Timestamp**: 2026-07-30 UTC
 - **Change**: `install.sh` gained `NOMADTTY_TLS=certbot`/`NOMADTTY_TLS_EMAIL` (Let's
