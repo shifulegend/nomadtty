@@ -150,3 +150,14 @@ fails fast (~180ms, not a timeout), suggesting a genuine environment-
 sensitive assertion mismatch rather than pure timing. Not yet root-caused or
 fixed — tracked here so a future session doesn't waste time assuming its own
 changes caused these specific three.
+
+**Also confirmed pre-existing on this class of sandbox (2026-07-30):**
+`android-mobile-ux.spec.js`'s `Hist toggle reveals real scrollback via tmux
+copy-mode and never sends a PTY input byte` and `mcp-tools.spec.js`'s
+`list_active_ports › lists the MCP server's own listening port` were
+confirmed, while verifying the Docker/`install.sh` deployment-unification fix
+(see `docs/ai/decision-log.md`'s 2026-07-30 entry), to fail identically both
+with that fix applied and on a clean checkout of the commit immediately
+before it — ruling out that fix as the cause. Not yet root-caused; likely
+environment-specific (e.g. `ss`/`netstat` output shape or tmux copy-mode
+timing on this particular host class).

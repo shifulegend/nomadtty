@@ -66,13 +66,21 @@ Captured over 5G. Sensitive fields (server IP, session ID, URL, branch name) are
 curl -fsSL https://raw.githubusercontent.com/shifulegend/nomadtty/main/install.sh | sudo bash
 ```
 
-The installer automatically:
-1. Installs `ttyd`, `tmux`, `nginx`, `curl` via apt
-2. Downloads `kb.js` to `/var/www/nomadtty/`
-3. Installs and enables the nginx vhost (port 80)
-4. Installs and starts the `ttyd` systemd service (persists across reboots)
-5. Runs a health check — prints `HTTP 200 OK` if everything is working
-6. Prints the URL to open in your browser
+This installs the full, currently-recommended architecture: the mobile
+toolbar, multi-session Session Manager, and the MCP server for AI-agent
+terminal access — all in one path (see `docs/ai/decision-log.md`'s 2026-07-30
+entry for why there is only one installer now, not two). The installer
+automatically:
+1. Installs `ttyd`, `tmux`, `nginx`, `nodejs`, `npm`, `git`, `openssl` via apt
+2. Clones (or updates) the app into `/opt/nomadtty` and runs `npm ci`
+3. Installs and enables the nginx vhost (port 80), reverse-proxying to the
+   Session Manager
+4. Generates an `MCP_AUTH_TOKEN` (or preserves an existing one on re-runs),
+   stored in `/etc/nomadtty/nomadtty.env` (`chmod 600`)
+5. Installs and starts the `nomadtty` systemd service (persists across
+   reboots)
+6. Runs a health check — prints `HTTP 200 OK` if everything is working
+7. Prints the URL, the MCP token, and exact uninstall commands
 
 At the end you will see:
 
@@ -80,17 +88,30 @@ At the end you will see:
 ✓  NomadTTY installed and running.
 
    Open:  http://192.168.1.x
+
+   MCP_AUTH_TOKEN (newly generated, stored in /etc/nomadtty/nomadtty.env, chmod 600):
+     <64 hex chars>
+
+   MCP server listens on 0.0.0.0:4200.
+   This is reachable beyond localhost — make sure a firewall or
+   Tailscale (recommended) restricts who can reach it, per SECURITY.md.
 ```
 
 ### Configuration options
 
-All options are env vars — no config file to edit:
+All options are env vars — no config file to hand-edit before install:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NOMADTTY_HOST` | _(any)_ | Set your domain as nginx `server_name`, e.g. `terminal.example.com` |
-| `TTYD_PORT` | `47821` | Internal ttyd listen port (loopback only, not publicly exposed) |
-| `NOMADTTY_USER` | current sudo user | OS user that runs ttyd — must own the tools you want available in the shell |
+| `NOMADTTY_USER` | current sudo user | OS user that runs the backend — must own the tools you want available in the shell |
+| `NOMADTTY_INSTALL_DIR` | `/opt/nomadtty` | Where the application code is installed |
+| `NOMADTTY_BRANCH` | `main` | Git branch/tag to install |
+| `NOMADTTY_LOCAL_SOURCE` | _(none)_ | Install from an existing local checkout instead of `git clone` (offline/air-gapped installs) |
+| `MCP_AUTH_TOKEN` | auto-generated | Bearer token for the MCP server; preserved across re-runs unless overridden |
+| `MCP_PORT` | `4200` | MCP server port |
+| `MCP_HOST` | `0.0.0.0` | MCP server bind address — set `127.0.0.1` for local-only access |
+| `SESSION_MANAGER_PORT` | `4000` | Session Manager port (loopback-only) |
 
 **With a custom domain:**
 
@@ -99,11 +120,11 @@ curl -fsSL https://raw.githubusercontent.com/shifulegend/nomadtty/main/install.s
   | sudo NOMADTTY_HOST=terminal.example.com bash
 ```
 
-**With a custom port and user:**
+**With your own MCP token and a specific deploy user:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/shifulegend/nomadtty/main/install.sh \
-  | sudo TTYD_PORT=9000 NOMADTTY_USER=ubuntu bash
+  | sudo MCP_AUTH_TOKEN=$(openssl rand -hex 32) NOMADTTY_USER=ubuntu bash
 ```
 
 ### Uninstall
@@ -111,29 +132,29 @@ curl -fsSL https://raw.githubusercontent.com/shifulegend/nomadtty/main/install.s
 The installer prints exact uninstall commands at the end. In short:
 
 ```bash
-sudo systemctl disable --now ttyd
-sudo rm -f /etc/systemd/system/ttyd.service \
+sudo systemctl disable --now nomadtty
+sudo rm -f /etc/systemd/system/nomadtty.service \
            /etc/nginx/sites-available/nomadtty \
            /etc/nginx/sites-enabled/nomadtty
-sudo rm -rf /var/www/nomadtty
+sudo rm -rf /etc/nomadtty /opt/nomadtty
 sudo systemctl daemon-reload && sudo systemctl reload nginx
 ```
 
 ### Troubleshoot
 
 ```bash
-# Is ttyd running?
-systemctl status ttyd
+# Is the backend running?
+systemctl status nomadtty
 
 # Is nginx config valid?
 sudo nginx -t
 
 # Live logs
-journalctl -u ttyd -f
+journalctl -u nomadtty -f
 tail -f /var/log/nginx/nomadtty.access.log
 
-# Is the toolbar being injected?
-curl -s http://localhost/ | grep 'kb.js'
+# Is the Session Manager responding?
+curl -s http://localhost/ | grep 'Session Manager'
 ```
 
 ---
@@ -143,10 +164,13 @@ curl -s http://localhost/ | grep 'kb.js'
 ### Run pre-built image (amd64 / arm64)
 
 ```bash
-docker run -d -p 80:80 --name nomadtty ghcr.io/shifulegend/nomadtty:latest
+docker run -d -p 80:80 -p 4200:4200 --name nomadtty ghcr.io/shifulegend/nomadtty:latest
 ```
 
-Then open `http://localhost` in your browser.
+Then open `http://localhost` in your browser. `docker logs nomadtty` prints
+the auto-generated `MCP_AUTH_TOKEN` on first start (pass your own via
+`-e MCP_AUTH_TOKEN=...` for a value that survives container recreation).
+Drop `-p 4200:4200` if you don't need MCP/AI-agent access.
 
 ### Build locally
 
@@ -169,17 +193,19 @@ docker buildx build \
 
 ## Manual Install
 
+For anyone who prefers to see each step rather than run `install.sh`:
+
 ### 1 — Install dependencies
 
 ```bash
-sudo apt-get install -y ttyd tmux nginx
+sudo apt-get install -y ttyd tmux nginx nodejs npm git rsync openssl
 ```
 
-### 2 — Deploy the toolbar
+### 2 — Get the code and install Node dependencies
 
 ```bash
-sudo mkdir -p /var/www/nomadtty
-sudo cp src/kb.js /var/www/nomadtty/kb.js
+sudo git clone https://github.com/shifulegend/nomadtty.git /opt/nomadtty
+cd /opt/nomadtty && sudo npm ci --omit=dev
 ```
 
 ### 3 — Configure nginx
@@ -192,12 +218,28 @@ sudo ln -sf /etc/nginx/sites-available/nomadtty /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-### 4 — Start ttyd as a service
+### 4 — Configure the MCP token and env file
 
 ```bash
-sudo cp systemd/ttyd.service /etc/systemd/system/
+sudo mkdir -p /etc/nomadtty
+sudo tee /etc/nomadtty/nomadtty.env <<EOF
+MCP_AUTH_TOKEN=$(openssl rand -hex 32)
+MCP_PORT=4200
+MCP_HOST=0.0.0.0
+SESSION_MANAGER_PORT=4000
+EOF
+sudo chmod 600 /etc/nomadtty/nomadtty.env
+```
+
+### 5 — Start the backend as a service
+
+```bash
+sudo cp systemd/nomadtty.service /etc/systemd/system/
+# Substitute the placeholders (or edit the file directly):
+sudo sed -i "s#NOMADTTY_WORKING_DIR#/opt/nomadtty#g; s#NOMADTTY_NODE_BIN#$(command -v node)#g; s/NOMADTTY_USER/$(id -un)/g" \
+  /etc/systemd/system/nomadtty.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now ttyd
+sudo systemctl enable --now nomadtty
 ```
 
 ---
@@ -207,56 +249,48 @@ sudo systemctl enable --now ttyd
 ```mermaid
 graph LR
     Client["📱 Client\nPhone / Tablet / Desktop\nTailscale network"]
+    Agent["🤖 AI agent\n(MCP client)"]
 
-    subgraph server ["Linux server"]
+    subgraph server ["Linux server — one nomadtty systemd service / container"]
         Nginx["nginx :80\nHTTP reverse proxy"]
-        KbJs["/var/www/nomadtty/kb.js\nMobile toolbar"]
-        TTYD["ttyd :47821\n127.0.0.1 only"]
-        TMUX["tmux\nsession: main"]
+        SM["Session Manager\n:4000, 127.0.0.1 only\nserver/session-manager.js"]
+        MCP["MCP server\n:4200 (bearer-token auth)\nserver/mcp/**"]
+        TTYD["ttyd (per session)\n127.0.0.1, dynamic port"]
+        TMUX["tmux\nnamed per session"]
         Bash["bash\npersistent shell"]
     end
 
     Client -- "HTTP :80" --> Nginx
-    Nginx -- "GET /kb.js\n(no-cache)" --> KbJs
-    Nginx -- "GET /ws\nWebSocket upgrade\npass-through" --> TTYD
-    Nginx -- "GET /\nsub_filter injects:\n① viewport meta\n② WS hook script\n③ script src=/kb.js" --> TTYD
-    TTYD -- "spawns" --> TMUX
+    Nginx -- "GET /, /kb.js,\n/api/sessions, /term/:id/*" --> SM
+    Agent -- "MCP Streamable HTTP\n:4200 + Bearer token" --> MCP
+    SM -- "spawns per session" --> TTYD
+    MCP -- "capture-pane / send-keys\n(no browser needed)" --> TMUX
+    TTYD -- "attaches" --> TMUX
     TMUX -- "attaches or creates" --> Bash
-    KbJs -. "window._S.send('0'+bytes)\nPTY input" .-> TTYD
 ```
 
-### How the injection works
-
-nginx's `sub_filter` rewrites ttyd's `<head>` on the fly before the HTML reaches the
-browser. Three items are injected in a single pass:
-
-1. **Viewport meta tag** — mobile scaling, prevents iOS double-tap zoom, triggers
-   keyboard-resize-content on Android.
-2. **Inline WebSocket hook** (`< 300 B`) — overrides `window.WebSocket` before ttyd's
-   bundle loads. Stores the `/ws` connection as `window._S` so `kb.js` can send PTY
-   bytes without modifying ttyd's source.
-3. **`<script src="/kb.js" defer>`** — loads the full toolbar after the DOM is parsed.
-
-The toolbar then lives entirely in `src/kb.js`: a single self-contained IIFE with no
-dependencies, no build step, and no bundler.
+nginx reverse-proxies everything to the Session Manager (a Node process); it no
+longer does raw ttyd `sub_filter` HTML injection — the Session Manager itself
+injects the mobile toolbar's `<script>` tag and WebSocket hook into each
+session's HTML head (see `injectToolbar()` in `server/session-manager.js`),
+and serves `kb.js` directly. `src/kb.js` itself is still a single
+self-contained IIFE with no dependencies, no build step, and no bundler.
 
 ---
 
 ## Session Manager & MCP Server
 
-> **Note:** this is a separate, newer Node.js backend (`server/**`) alongside the
-> nginx/ttyd setup above. It supports multiple concurrent named terminal sessions and
-> exposes them to AI agents over MCP. It is not yet wired into `Dockerfile`/`install.sh`
-> — run it directly with Node. (This is a known, tracked gap — see
-> `docs/ai/project-overview.md`'s current-state note — not an oversight in this doc.)
+The Session Manager supports multiple concurrent named terminal sessions and
+exposes them to AI agents over MCP — this is what `install.sh`/Docker install
+and run by default (see `docs/ai/decision-log.md`'s 2026-07-30 entry for why
+there is now one canonical deployment path instead of two).
 
 This backend is governed by the same [`AGENTS.md`](AGENTS.md) constraints as the rest
-of the repo. Two are worth calling out explicitly here since it's easy to assume
+of the repo. Two are worth calling out explicitly since it's easy to assume
 otherwise once an MCP server is LAN-reachable: **every ttyd process the Session
-Manager spawns still listens on `127.0.0.1` only and still runs with `--writable`** —
-exactly like the legacy nginx model above. Nothing about adding MCP support changes
-that. What *is* new is a second, separate listener (the MCP server) that is
-LAN-facing by default and gated by its own bearer-token authentication — see
+Manager spawns still listens on `127.0.0.1` only and still runs with `--writable`**.
+What *is* LAN-facing by default is a second, separate listener (the MCP server),
+gated by its own bearer-token authentication — see
 [Security model](#security-model) below.
 
 ### Architecture
@@ -471,6 +505,10 @@ This testing found two more real, previously-undiscovered bugs, both now fixed:
 | ![Streamed text with dozens of literal caret-bracket-A garbage sequences corrupting the output, caused by touch-scroll leaking arrow-key escapes into the PTY](docs/assets/scroll-distortion-bug-before-fix.png) | ![The same streaming scenario after the fix, rendering cleanly with no garbage text anywhere](docs/assets/screenshot-android-stress-scroll-while-streaming.png) |
 
 ### Quick start
+
+`install.sh`/Docker (above) set this up for you automatically, including
+generating and storing `MCP_AUTH_TOKEN`. To run from a local checkout
+without installing system-wide (e.g. for development):
 
 ```bash
 npm install
@@ -876,11 +914,11 @@ NomadTTY is designed for **private network deployment**, not public internet exp
 
 | Layer | Mechanism |
 |-------|-----------|
-| **ttyd isolation** | Binds to `127.0.0.1:47821` only — unreachable from outside the server |
-| **nginx as gateway** | The only public-facing process; enforces TLS, rate limits, auth |
-| **No built-in auth** | Your responsibility — Tailscale VPN is the recommended approach |
-| **Non-root service** | ttyd runs as the deploy user, not root |
-| **Sub-filter injection** | Inline hook is < 300 B; full toolbar in external `kb.js` |
+| **ttyd isolation** | Every per-session ttyd process binds `127.0.0.1` only — unreachable from outside the server |
+| **nginx as gateway** | The only public-facing process for the terminal UI; enforces TLS, rate limits, auth |
+| **No built-in auth on the Session Manager UI** | Your responsibility — Tailscale VPN is the recommended approach |
+| **MCP bearer-token auth** | Required for any non-loopback MCP bind — see [Security model](#security-model) |
+| **Non-root service** | Configurable via `NOMADTTY_USER`; not root by default |
 | **Dependabot scanning** | Automated CVE checks on Docker base and GitHub Actions pins |
 
 **Recommended deployment:** put NomadTTY behind [Tailscale](https://tailscale.com) so

@@ -1,7 +1,53 @@
 # NomadTTY — Mistake Log
 <!-- canonical source of truth | newest entries first -->
-<!-- last updated: 2026-07-29 -->
+<!-- last updated: 2026-07-30 -->
 <!-- update immediately when a mistake is found; propagate lessons to engineering-rules.md -->
+
+---
+
+### [2026-07-30-001] Docker/install.sh quickstart was completely broken (502 Bad Gateway on every request)
+- **Timestamp**: 2026-07-30 UTC
+- **Summary**: While scoping work to unify NomadTTY's two deployment models, actually
+  built and ran the shipped `Dockerfile` (`docker build -t nomadtty . && docker run -d
+  -p 80:80 nomadtty`, the exact command in README.md's "Quick Install"/"Docker" sections)
+  instead of just reading it. Every request returned `502 Bad Gateway` from nginx.
+- **Root cause**: Commit `55a5208` ("feat: implement mobile-friendly session manager and
+  process registry") rewrote `nginx/ttyd.conf` to reverse-proxy to
+  `http://127.0.0.1:4000` (the Node Session Manager) and removed its old `sub_filter`
+  injection entirely — a deliberate, correct change for the *new* architecture. But
+  `Dockerfile`/`docker-entrypoint.sh` (and identically, `install.sh` +
+  `systemd/ttyd.service`) were never updated to match: they still `apt-get install ttyd`
+  and exec raw `ttyd --port 47821 ...` directly as the backend, with nothing ever
+  listening on port 4000. nginx's own config (copied verbatim into both the Docker image
+  and a bare-metal `install.sh` run) has proxied to a port nothing serves ever since that
+  commit landed — this was not a hypothetical/future gap, it was the actual state of the
+  two most prominent install paths in the README.
+- **Affected files**: `Dockerfile`, `docker-entrypoint.sh`, `install.sh`,
+  `systemd/ttyd.service`, `docker-compose.yml` (all describe/ship the broken raw-ttyd
+  backend against a Session-Manager-only nginx config).
+- **Detection method**: Rather than trusting the existing docs/ai/project-overview.md
+  "ASSUMPTION" note (which frames this as merely "two parallel unreconciled models," not
+  "one of them is non-functional"), actually ran `docker build` + `docker run` +
+  `curl`/`docker logs`/`docker exec ... ps aux` against the literal Dockerfile as
+  committed. The response was `502 Bad Gateway`; `docker exec ps aux` confirmed only raw
+  `ttyd`+nginx processes running, nothing on port 4000.
+- **Correction**: See `docs/ai/decision-log.md`'s matching 2026-07-30 entry — `Dockerfile`,
+  `docker-entrypoint.sh`, `install.sh`, and `systemd/nomadtty.service` were rewritten so
+  the "legacy" install paths actually start the Session Manager + MCP backend
+  (`server/main.js`), matching what `nginx/ttyd.conf` already expects, instead of raw
+  ttyd standalone. Verified via a rebuilt `docker run` returning real terminal HTML with
+  `kb.js` present, `HTTP 200`.
+- **Prevention rule**: When one half of a client/server pair changes (here, the nginx
+  proxy target), grep every file that ships or configures the *other* half for the old
+  target/assumption before considering the change complete — a reverse-proxy config and
+  the process it points to are a single unit that must be verified together by actually
+  running the resulting deployment, not just reading each file in isolation. "The nginx
+  config was already updated for the new architecture" is not evidence the paths that
+  install/run the backend were updated to match; always do a real `docker build && docker
+  run && curl` (or the bare-metal equivalent) of a change that touches deployment wiring,
+  even when time-pressured to move on to the next backlog item — this is exactly the kind
+  of gap that only running the actual artifact surfaces, per every ttyd/nginx/systemd
+  mistake already logged above (2026-06-20-001 through -006).
 
 ---
 

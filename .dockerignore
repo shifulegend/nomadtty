@@ -1,0 +1,7 @@
+.git
+node_modules
+tests
+docs
+*.md
+!README.md
+docker-compose.yml
