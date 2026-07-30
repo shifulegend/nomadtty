@@ -15,19 +15,38 @@ while nothing ran it. Do not reintroduce a raw-ttyd-only Docker/install.sh path 
 also reverting `nginx/ttyd.conf`'s `proxy_pass` target to match.
 
 ## Dockerfile rules
-- Base: `ubuntu:26.04` (bumped from the originally-decided `24.04` — see
-  `docs/ai/decision-log.md`'s 2026-06-20 entry for the original rationale, which still
-  holds for the newer LTS: ttyd is available via apt, no alpine/compile-from-source
-  needed). Do not switch to alpine without testing ttyd availability.
-- Multi-arch target: `linux/amd64,linux/arm64`.
+- Base: `alpine:3.20` (switched from `ubuntu:26.04` on 2026-07-30 — see
+  `docs/ai/decision-log.md`'s matching entry and `docs/ai/mistakes.md` 2026-07-30-004:
+  the original 2026-06-20 "alpine has no ttyd apt package" rationale was actually
+  incorrect even at the time — `ttyd`/`nodejs`/`npm`/`nginx`/`tmux` are all in Alpine's
+  `community`/`main` repos — found only once someone actually checked instead of
+  trusting the prior decision. Result: ~4x smaller image (163MB vs 686MB), verified
+  end-to-end (build, run, real session creation, MCP auth) before switching. Do not
+  revert to Ubuntu/switch to a different base without re-testing ttyd/nodejs
+  availability directly (`apk search`), not from memory of an old decision.
+- Uses `apk add --no-cache` (no separate `apt-get update`/cache-cleanup step needed —
+  `--no-cache` means apk never persists its index).
+- nginx vhost config goes in `/etc/nginx/http.d/*.conf` (Alpine's nginx package
+  auto-includes everything there) — **not** `sites-available`/`sites-enabled`
+  (Debian/Ubuntu-specific, still used by `install.sh`'s bare-metal path, which is
+  unaffected by this change). `docker-entrypoint.sh`'s `NOMADTTY_HOST` sed target must
+  match this path.
+- Multi-arch target: `linux/amd64,linux/arm64`. Alpine has strong arm64 package
+  support generally; this specific image's arm64 build was not independently verified
+  in the session that made this switch (no arm64 hardware/emulation available) — verify
+  before relying on it if this becomes a blocker.
 - Installs `nodejs`/`npm` alongside `ttyd`/`tmux`/`nginx` — the backend needs Node; ttyd
   itself is still spawned per-session by `server/session-manager.js`, not run standalone.
-- `DEBIAN_FRONTEND=noninteractive` must be set for apt installs.
-- Run `rm -rf /var/lib/apt/lists/*` after every apt install layer.
 - Use `npm ci --omit=dev` (not `npm install`) for reproducible, dev-dependency-free builds.
 - `docker-entrypoint.sh` starts nginx in background (`nginx -g 'daemon off;' &`), then
   execs `node server/main.js` as PID 1 foreground — auto-generating `MCP_AUTH_TOKEN` via
   `openssl rand -hex 32` first if the operator didn't supply one via `-e`.
+- Version pinning: deliberately does **not** hard-pin exact package versions
+  (`ttyd=1.7.7-r0`, etc.) via `apk`/`apt` — both Alpine's and Debian/Ubuntu's official
+  archives generally retain only the current version of each package, so a hard pin
+  would eventually 404 when the archive rotates, trading reproducibility for a *worse*
+  failure mode (the build breaking outright). The actually-installed versions are
+  recorded in `docs/ai/project-overview.md` instead, for audit purposes.
 - `.dockerignore` excludes `.git`, `node_modules`, `tests`, `docs` from the build context.
 
 ## nginx rules

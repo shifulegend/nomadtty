@@ -5,6 +5,47 @@
 
 ---
 
+### [2026-07-30-004] "Alpine has no ttyd apt package" was never actually true — an unverified assumption carried for over a month
+- **Timestamp**: 2026-07-30 UTC
+- **Summary**: The 2026-06-20 decision to base the Dockerfile on Ubuntu instead of
+  Alpine gave, as its stated rationale, "Alpine (no ttyd apt package)... would require
+  compiling ttyd from source." Re-evaluating the base image for size (competitive-
+  analysis backlog item 20), actually checking (`apk search`, and separately confirmed
+  via Alpine's public package index) showed `ttyd` has been in Alpine's `community` repo
+  since at least 2024-04-02 — over a year before the original decision was made, and
+  over two years before this correction. `nodejs`, `npm`, `nginx`, and `tmux` are all
+  present too. The claim was wrong from the moment it was written, not just outdated.
+- **Root cause**: The original decision was recorded without actually running `apk
+  search ttyd` (or equivalent) against a real Alpine image — an assumption was stated as
+  fact and then propagated into `docs/ai/decision-log.md` and `.claude/rules/infra.md`
+  ("Do not switch to alpine without testing ttyd availability" — ironic, since the
+  original decision itself never did that test either) without anyone independently
+  re-verifying it until this session.
+- **Affected files**: `Dockerfile` (base image switched to `alpine:3.20`),
+  `docker-entrypoint.sh` (nginx vhost path), `docs/ai/decision-log.md`,
+  `.claude/rules/infra.md`, `docs/ai/project-overview.md`.
+- **Detection method**: Ran `apk search ttyd`/`apk search nodejs nginx tmux` against a
+  real `alpine:3.20` container (working around this sandbox's TLS-intercepting proxy by
+  temporarily switching the apk mirror to plain HTTP for the test only — never shipped
+  that way) instead of trusting the prior decision-log entry's claim. Then built and ran
+  a full Alpine-based image end-to-end (real `docker build`, `docker run`, session
+  creation via the HTTP API spawning genuine `ttyd`/`tmux`, MCP auth) before committing
+  to the switch, and measured the resulting image against a freshly-built Ubuntu-based
+  comparison image for a fair size delta.
+- **Correction**: Switched `Dockerfile`'s base image to `alpine:3.20`. Result: ~163MB vs
+  ~686MB for the equivalent Ubuntu-based image (~4.2x smaller), with identical verified
+  behavior. `docker-entrypoint.sh`'s `NOMADTTY_HOST` sed target updated to Alpine's
+  nginx vhost path (`/etc/nginx/http.d/nomadtty.conf`, not Debian/Ubuntu's
+  `sites-available`/`sites-enabled`).
+- **Prevention rule**: A decision-log entry's stated rationale is not automatically true
+  just because it's written down and was never contradicted — when re-evaluating an old
+  architectural decision (especially one explicitly flagged as a TODO for re-evaluation,
+  as this one was), re-verify its original premise directly against the real tool/package
+  manager before accepting or rejecting the old conclusion, rather than treating the
+  prior entry itself as the source of truth about external reality.
+
+---
+
 ### [2026-07-30-003] install.sh's own health check could silently abort the script under `set -e`, skipping its own diagnostic output
 - **Timestamp**: 2026-07-30 UTC
 - **Summary**: While verifying `install.sh`'s new config-persistence feature (re-running

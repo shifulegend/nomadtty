@@ -11,14 +11,17 @@
 # See docker-entrypoint.sh for MCP_AUTH_TOKEN auto-generation and the full
 # list of MCP_*/SESSION_MANAGER_*/TTYD_* env vars in .claude/rules/config.md.
 
-FROM ubuntu:26.04
-
-ARG DEBIAN_FRONTEND=noninteractive
+# Alpine, not Ubuntu: ttyd/nodejs/npm/nginx/tmux are all available via apk
+# (community repo) — the original 2026-06-20 decision to use Ubuntu because
+# "alpine has no ttyd apt package" was re-checked and found incorrect (or
+# outdated) when actually tested; see docs/ai/decision-log.md's 2026-07-30
+# entry for the size comparison (~4x smaller) and end-to-end verification.
+FROM alpine:3.20
 
 # ttyd/tmux: spawned per-session by the Node backend (server/session-manager.js).
 # nginx: reverse-proxies to the Session Manager. nodejs/npm: run the backend.
 # openssl: MCP_AUTH_TOKEN generation. curl/ca-certificates: health checks + TLS.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apk add --no-cache \
     ttyd \
     tmux \
     nginx \
@@ -26,8 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     npm \
     openssl \
     curl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates
 
 WORKDIR /app
 
@@ -43,15 +45,16 @@ COPY src/ /app/src/
 
 # nginx config: reverse-proxies to the Session Manager on 127.0.0.1:4000.
 # The Session Manager itself serves /kb.js and injects the toolbar per
-# session — no separate sub_filter injection needed in this vhost.
-COPY nginx/ttyd.conf /etc/nginx/sites-available/nomadtty
-RUN ln -sf /etc/nginx/sites-available/nomadtty /etc/nginx/sites-enabled/nomadtty \
-    && rm -f /etc/nginx/sites-enabled/default
+# session — no separate sub_filter injection needed in this vhost. Alpine's
+# nginx package auto-includes every *.conf under /etc/nginx/http.d/ (its
+# equivalent of Debian/Ubuntu's sites-enabled), so no separate symlink step.
+COPY nginx/ttyd.conf /etc/nginx/http.d/nomadtty.conf
+RUN rm -f /etc/nginx/http.d/default.conf
 
 # Patch nginx config: listen on any hostname by default; container users can
 # set their own domain via the NOMADTTY_HOST env var at `docker run` time.
 RUN sed -i 's/server_name terminal\.yourdomain\.com/server_name _/' \
-        /etc/nginx/sites-available/nomadtty
+        /etc/nginx/http.d/nomadtty.conf
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

@@ -4,7 +4,7 @@ set -e
 # Optionally customise the nginx server_name
 if [ -n "$NOMADTTY_HOST" ]; then
     sed -i "s/server_name _;/server_name ${NOMADTTY_HOST};/" \
-        /etc/nginx/sites-available/nomadtty
+        /etc/nginx/http.d/nomadtty.conf
 fi
 
 # Auto-generate MCP_AUTH_TOKEN if the operator didn't supply one via

@@ -15,6 +15,55 @@
 
 ---
 
+### [2026-07-30] Docker base image switched from ubuntu:26.04 to alpine:3.20 (~4x smaller); CI gained nginx-config and Playwright jobs
+- **Context**: The competitive-analysis backlog's item 20 asked to re-evaluate a smaller
+  base image "now that ttyd's apt availability is confirmed" — but that framing itself
+  assumed apt (Ubuntu/Debian) was the only viable path, per the original 2026-06-20
+  decision's claim that Alpine lacks a ttyd package. Re-checking that claim directly
+  (rather than trusting it) found it was simply wrong: `ttyd` has been in Alpine's
+  `community` repo since 2024-04-02, alongside `nodejs`/`npm`/`nginx`/`tmux` — see
+  `docs/ai/mistakes.md` 2026-07-30-004.
+- **Decision**: `Dockerfile`'s base image is now `alpine:3.20`. `docker-entrypoint.sh`'s
+  `NOMADTTY_HOST` substitution now targets Alpine's nginx vhost path
+  (`/etc/nginx/http.d/nomadtty.conf`) instead of Debian/Ubuntu's `sites-available`/
+  `sites-enabled` (which `install.sh`'s separate bare-metal path still uses, unaffected).
+  Also wired two previously-TODO CI jobs into `.github/workflows/ci.yml`: `nginx-config`
+  (installs nginx, drops in `nginx/ttyd.conf` exactly like `install.sh` does, runs
+  `nginx -t`) and `playwright` (full 63-test suite: `npm ci` at root and in `tests/`,
+  install ttyd/tmux, install Playwright browsers, run the suite, upload the HTML report
+  as an artifact on failure) — previously only `shellcheck` and `docker-build` ran in CI,
+  meaning the project's primary verification mechanism (the Playwright suite) had never
+  actually been checked by CI at all.
+- **Alternatives considered**: `debian:bookworm-slim` — checked directly (`apt-cache
+  policy ttyd` on a real `debian:bookworm-slim` container) and confirmed Debian's
+  official archive does **not** package `ttyd` at all (candidate: none), ruling it out
+  immediately, unlike Alpine. Hard-pinning exact package versions in either package
+  manager (`ttyd=1.7.7-r0`, etc.) for reproducibility — rejected: both Alpine's and
+  Debian/Ubuntu's official archives generally retain only the current version of a
+  package, so a hard pin would eventually break the build outright once the archive
+  rotates past that exact version, trading reproducibility for a worse failure mode.
+  Actual versions are recorded in `docs/ai/project-overview.md`'s Stack table instead,
+  for audit purposes without the brittleness.
+- **Rationale**: A ~4.2x image-size reduction (163MB vs. 686MB for an otherwise-identical
+  image, both freshly built for direct comparison) with zero functional regression is a
+  clear, low-risk win once the underlying assumption blocking it turned out to be false.
+- **Consequences**: `install.sh`'s bare-metal (Debian/Ubuntu apt-based) path is completely
+  unaffected — this is a Docker-only change. Multi-arch (`linux/arm64`) support for the
+  new Alpine-based image was not independently verified in this session (no arm64
+  hardware/emulation available) — flagged as a residual gap in
+  `docs/ai/project-overview.md`'s TODO list, not assumed to work. Verified end-to-end:
+  real `docker build` + `docker run` of the exact committed `Dockerfile`/
+  `docker-entrypoint.sh` (via a temporary, sandbox-only build-context workaround for this
+  environment's TLS-intercepting proxy — never present in the shipped files), HTTP 200,
+  a real session created via the API spawning genuine `ttyd`/`tmux` processes, the
+  resulting `/term/<id>/` page correctly toolbar-injected, MCP server correctly enforcing
+  auth (401 without a token), and `NOMADTTY_HOST` substitution correctly rewriting the
+  Alpine-path nginx config.
+- **Owner**: claude (session doing a "no compromise" pass on the competitive-analysis
+  backlog, per explicit user direction).
+
+---
+
 ### [2026-07-30] install.sh persists its own settings in /etc/nomadtty/nomadtty.env, not just MCP_AUTH_TOKEN
 - **Context**: The competitive-analysis backlog's item 12 flagged NomadTTY's two
   historically-disjoint config surfaces. Investigating what "unify" should concretely mean
