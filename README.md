@@ -4,12 +4,14 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docker Image](https://ghcr-badge.egpl.dev/shifulegend/nomadtty/size)](https://ghcr.io/shifulegend/nomadtty)
 
-**A mobile-friendly web terminal you can access from anywhere.**
+**A mobile-friendly, agent-friendly web terminal you can access from anywhere.**
 
 NomadTTY wraps [ttyd] with a purpose-built mobile keyboard toolbar — giving you ESC,
 TAB, arrow keys, modifier keys (Ctrl/Shift/Alt), F1–F12, and more, all from a phone or
 tablet browser. Sessions are persistent via [tmux], so closing your browser never kills
-your work.
+your work. The same persistent sessions are also exposed over [MCP](#session-manager--mcp-server),
+so AI coding agents (Claude Code, Antigravity, etc.) can drive a real terminal directly —
+not just you.
 
 [ttyd]: https://github.com/tsl0922/ttyd
 [tmux]: https://github.com/tmux/tmux
@@ -42,6 +44,9 @@ Captured over 5G. Sensitive fields (server IP, session ID, URL, branch name) are
 
 ## Features
 
+- **Agent-friendly (MCP)** — AI coding agents can drive a real, persistent terminal
+  directly: type commands, read output, send control keys, even screenshot the pane —
+  no browser tab required. See [Session Manager & MCP Server](#session-manager--mcp-server).
 - **Mobile-first toolbar** — tap CTRL, SHFT, or ALT to activate sticky modifiers, then
   type on your phone keyboard to send `Ctrl+C`, `Alt+B`, etc.
 - **Full navigation keys** — ESC, TAB, Shift+TAB, ↑↓←→, HOME, END, PGUP, PGDN, INS, DEL
