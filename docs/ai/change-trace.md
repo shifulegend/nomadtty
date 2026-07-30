@@ -17,6 +17,52 @@
 
 ---
 
+### [2026-07-30] Verified the copy-mode scroll fix end-to-end on a real remote VM; found and fixed 3 test bugs plus a real perf regression
+- **Timestamp**: 2026-07-30 02:00-05:10 UTC
+- **Change**: This local sandbox stayed under sustained heavy load (7+ on 2
+  cores) for the entire prior session, making full-suite verification of the
+  scroll fix (888e748) inconclusive. Used the Colab CLI already available in
+  this environment to provision a properly-resourced 2-core/12GB reference
+  VM and ran the full Playwright suite there, iterating through 4 real bugs
+  the process uncovered: (1) `android-mobile-ux.spec.js`'s Hist-toggle test
+  checked for a specific marker string in `capture.getOutput()`'s
+  accumulated WS byte stream, which lost frames across a transient WS
+  reconnect under load -- replaced with a check on tmux's own rendered
+  copy-mode position indicator, a strictly more direct signal (see 19f4b7f,
+  754a601); (2) the same test's "zero PTY input" assertion checked the
+  WHOLE test's accumulated `getSentInput()` against `''`, which could never
+  pass once the setup step's own legitimate typing was accounted for --
+  rescoped to a delta against a pre-gesture baseline (19f4b7f); (3)
+  `mcp-tools.spec.js`'s `send_keystroke` interop test used a marker
+  containing `_`, invalid per `NAMED_KEY_RE` (8ce9072); (4) most
+  significantly, `exitCopyModeIfActive()`'s unconditional `tmux
+  display-message` check measurably doubled per-call latency for every
+  single MCP send (3.4ms -> 7.7ms average, measured directly) -- enough to
+  push several send-heavy tests over their timeout budgets. Fixed with an
+  in-memory Set tracking which panes this app's own copy-mode functions
+  have engaged, restoring send latency to baseline (ebfe470).
+- **Rationale**: The user explicitly asked for thorough verification with
+  screenshots/video given the local sandbox's resource constraints, and
+  later corrected the Colab interaction pattern mid-session (see
+  `memory/colab-cli-single-channel.md` -- mixing direct CLI calls with an
+  in-session `colab console` connection caused a silent fresh-VM
+  reprovision that lost ~8 minutes of environment setup).
+- **Affected areas**: `tests/specs/android-mobile-ux.spec.js`,
+  `tests/specs/mcp-tools.spec.js`, `server/mcp/tmux.js`,
+  `server/session-manager.js`, `tests/README.md` (new flakiness note).
+- **Verification**: Final clean run on the reference VM: 59/63 passed. The
+  remaining 4 (`get_screenshot`, `submit:false`, `send_keystroke` Ctrl+C,
+  and one instance also affecting `type_command` copy-mode interop) were
+  confirmed, via a side-by-side run of an unmodified `394e1e4` checkout on
+  the identical VM, to fail identically on code with none of this session's
+  changes -- pre-existing, unrelated fragility, documented in
+  `tests/README.md` rather than chased further today. Also independently
+  confirmed via `google-colab-cli` upstream issue #94 that the tool's own
+  `KernelClient` crash (encountered early in this process) was a known,
+  already-reported bug (`jupyter-kernel-client==1.0.0` incompatibility);
+  fixed locally by pinning `jupyter-kernel-client==0.9.0` per that issue's
+  own suggested workaround.
+
 ### [2026-07-29] Re-enabled mobile touch-scroll via real tmux copy-mode, with MCP self-heal
 - **Timestamp**: 2026-07-29 17:00-18:30 UTC
 - **Change**: Added a sticky "Hist" toolbar toggle (`src/kb.js`) that drives

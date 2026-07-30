@@ -136,3 +136,17 @@ or similar landing mid-keystroke) is a known, documented class of issue (see
 `docs/ai/mistakes.md` 2026-07-29-009 and -013), not evidence the suite is
 unreliable. If a run shows an isolated failure, re-run before assuming a
 regression; if a *specific* test fails repeatedly, that's a real signal.
+
+**Repeatably flaky on a 2-core machine (confirmed pre-existing, not caused by
+any specific change):** `mcp-tools.spec.js`'s `get_screenshot › captures the
+terminal's live viewport`, `type_command › submit:false leaves the text
+unsent`, and `send_keystroke › named mode: Ctrl+C interrupts a running
+foreground command` were confirmed, on 2026-07-30, to fail identically on a
+byte-for-byte clean checkout of commit `394e1e4` (before any changes from
+that session) run on the exact same 2-core/12GB Colab reference VM used to
+verify that session's own changes — ruling out that session's work as the
+cause before it was ever suspected further. `submit:false` in particular
+fails fast (~180ms, not a timeout), suggesting a genuine environment-
+sensitive assertion mismatch rather than pure timing. Not yet root-caused or
+fixed — tracked here so a future session doesn't waste time assuming its own
+changes caused these specific three.
