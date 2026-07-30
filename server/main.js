@@ -18,6 +18,29 @@
 
 'use strict';
 
+const arg = process.argv[2];
+if (arg === '-h' || arg === '--help') {
+  console.log(`NomadTTY backend — Session Manager + MCP server
+
+  node server/main.js
+
+Starts two listeners in one process:
+  Session Manager   127.0.0.1:$SESSION_MANAGER_PORT (default 4000), no auth, loopback only
+  MCP server        $MCP_HOST:$MCP_PORT (default 0.0.0.0:4200), bearer-token auth required
+
+Configuration is entirely environment variables — see .claude/rules/config.md
+or README.md's "Session Manager & MCP Server" section for the full list
+(MCP_*, SESSION_MANAGER_*, TTYD_*).
+
+Run 'node server/session-manager.js' instead for the Session Manager alone,
+with no MCP server.`);
+  process.exit(0);
+}
+if (arg === '--version') {
+  console.log(`nomadtty ${require('../package.json').version}`);
+  process.exit(0);
+}
+
 const sessionManager = require('./session-manager');
 const mcp = require('./mcp');
 

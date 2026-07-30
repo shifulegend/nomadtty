@@ -46,6 +46,7 @@ Full rules in `.claude/rules/` / `.github/instructions/` / `.agents/rules/`.
 - Update `docs/ai/decision-log.md` if an architectural decision was made.
 - Update `docs/ai/mistakes.md` immediately if you found and fixed a mistake.
 - Update `README.md` if behaviour, keyboard layout, or architecture changed.
+- Update `CHANGELOG.md`'s `[Unreleased]` section for every user-facing change.
 
 ## Commit style
 

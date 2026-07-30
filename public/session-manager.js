@@ -35,8 +35,8 @@
           '<div class="session-meta">' + s.status + ' &middot; last joined: ' + fmtTime(s.lastJoinedAt) + '</div>' +
         '</div>' +
         '<div class="session-actions">' +
-          '<button class="sm-btn join" data-id="' + s.id + '">Join</button>' +
-          '<button class="sm-btn close" data-id="' + s.id + '">Close</button>' +
+          '<button class="sm-btn join" data-id="' + s.id + '" title="Reattach to this session — its shell and scrollback are exactly as you left them.">Join</button>' +
+          '<button class="sm-btn close" data-id="' + s.id + '" title="Permanently ends this session. This cannot be undone.">Close</button>' +
         '</div>';
       listEl.appendChild(row);
     });
