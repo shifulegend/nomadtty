@@ -17,6 +17,34 @@
 
 ---
 
+### [2026-07-30] Added docs/competitive-analysis.md — closed-source-style adoption-readiness review
+- **Timestamp**: 2026-07-30 UTC
+- **Change**: Added `docs/competitive-analysis.md`, a human/product-facing
+  report (explicitly not part of the `docs/ai/**` AI-agent memory tree)
+  evaluating NomadTTY as an outside adopter would: installation friction
+  (benchmarked against Tailscale, Pi-hole, Portainer, Uptime Kuma, Home
+  Assistant, netdata, Cockpit, Coolify, and upstream ttyd), configuration/
+  wizard ergonomics, first-time hosting ease, documentation/help best
+  practices (GNU standards, Diátaxis, Keep a Changelog), and a competitive
+  landscape comparison against ttyd, GoTTY, Wetty, Shellinabox, sshwifty,
+  WebSSH2, tmate, Cockpit, and code-server — plus a search confirming no
+  mainstream web-terminal project has NomadTTY's combination of a mobile
+  touch-toolbar and an authenticated MCP server. Ends in a prioritized
+  backlog of recommended changes (analysis only — nothing in the backlog
+  was implemented this session).
+- **Rationale**: Explicit user request to review the tool "as if it was
+  closed source" across install/config/hosting/docs/competitive-comparison
+  angles and produce a list of changes to consider.
+- **Affected areas**: `docs/competitive-analysis.md` (new); no code changed.
+- **Related decisions**: none new — the report itself documents no
+  additional consequences beyond what `docs/ai/project-overview.md`'s
+  existing "two unreconciled deployment models" ASSUMPTION note already
+  covers; the backlog's top item (unify install/deploy) reinforces that
+  existing TODO rather than superseding it.
+- **Related mistakes**: none.
+
+---
+
 ### [2026-07-30] Confirmed the tmux capture-pane line-wrap fix (d72c259/0cb6e62) is solid; full-suite flakiness reconfirmed as pre-existing, not a regression
 - **Timestamp**: 2026-07-30 14:29-14:43 UTC
 - **Change**: Re-ran the full 63-test Playwright suite on the same Colab
