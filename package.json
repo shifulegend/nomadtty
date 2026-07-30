@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.2.0",
   "description": "NomadTTY backend — Session Manager (ttyd/tmux orchestration) and its Model Context Protocol server.",
+  "license": "SEE LICENSE IN LICENSE",
   "main": "server/main.js",
   "scripts": {
     "start": "node server/main.js",

@@ -3,6 +3,26 @@
 <!-- last updated: 2026-07-30 -->
 <!-- add an entry for every notable change: what, why, affected areas, commit -->
 
+### [2026-07-30] Relicensed from MIT to PolyForm Shield 1.0.0
+- **Timestamp**: 2026-07-30 UTC
+- **Change**: `LICENSE` replaced with the full, verbatim PolyForm Shield 1.0.0 text
+  (fetched directly from `https://polyformproject.org/licenses/shield/1.0.0.txt`, the
+  authoritative source, not reconstructed from memory) plus a `Required Notice:
+  Copyright (c) 2026 shifulegend` line per the license's own Notices clause.
+  `README.md`'s badge and License section updated to match (badge now links to the
+  official PolyForm page since GitHub's own license badge/detector doesn't recognize
+  this license). `package.json` gained a `"license": "SEE LICENSE IN LICENSE"` field
+  (previously had none) — confirmed against the live SPDX license-list-data registry
+  that no SPDX identifier exists for Shield specifically (unlike PolyForm Noncommercial
+  or Small Business, which do). `CONTRIBUTING.md` gained a License section so future
+  contributors know what they're agreeing to. `docs/articles/hashnode-nomadtty.md`'s
+  local copy updated for consistency (does not touch the already-published live post).
+  See `docs/ai/decision-log.md`'s matching entry for the full rationale, alternatives
+  considered, and consequences (not retroactive, not OSI-approved, no conflict with
+  bundled third-party MIT/ISC/BSD components).
+- **Affected areas**: `LICENSE`, `README.md`, `package.json`, `CONTRIBUTING.md`,
+  `docs/articles/hashnode-nomadtty.md`, `CHANGELOG.md`.
+
 ### [2026-07-30] README: surface agent-friendly (MCP) alongside mobile-friendly in the opening tagline/Features
 - **Timestamp**: 2026-07-30 UTC
 - **Change**: The MCP/AI-agent-access capability was fully documented in README.md's
