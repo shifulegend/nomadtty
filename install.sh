@@ -31,6 +31,18 @@
 #   MCP_HOST              MCP server bind address (default: 0.0.0.0 — LAN-facing;
 #                         set 127.0.0.1 for local-only access)
 #   SESSION_MANAGER_PORT  Session Manager port (default: 4000)
+#   NOMADTTY_TLS          "none" (default) or "certbot" — obtain a Let's
+#                         Encrypt cert and enable HTTPS. Requires NOMADTTY_HOST
+#                         to be a real, publicly-resolvable domain pointing at
+#                         this host, with port 80 reachable from the internet
+#                         for the HTTP-01 challenge, and NOMADTTY_TLS_EMAIL set.
+#                         Failure doesn't abort the install — HTTP still works.
+#   NOMADTTY_TLS_EMAIL    contact email for Let's Encrypt (required if
+#                         NOMADTTY_TLS=certbot)
+#   NOMADTTY_BASIC_AUTH   "user:password" — adds nginx Basic Auth in front of
+#                         the Session Manager/terminal UI (default: none).
+#                         Independent of MCP_AUTH_TOKEN, which always protects
+#                         the MCP server regardless of this setting.
 
 set -euo pipefail
 
@@ -43,10 +55,14 @@ LOCAL_SOURCE="${NOMADTTY_LOCAL_SOURCE:-}"
 MCP_PORT="${MCP_PORT:-4200}"
 MCP_HOST="${MCP_HOST:-0.0.0.0}"
 SESSION_MANAGER_PORT="${SESSION_MANAGER_PORT:-4000}"
+NOMADTTY_TLS="${NOMADTTY_TLS:-none}"
+NOMADTTY_TLS_EMAIL="${NOMADTTY_TLS_EMAIL:-}"
+NOMADTTY_BASIC_AUTH="${NOMADTTY_BASIC_AUTH:-}"
 NGINX_CONF="/etc/nginx/sites-available/nomadtty"
 SERVICE_FILE="/etc/systemd/system/nomadtty.service"
 ENV_DIR="/etc/nomadtty"
 ENV_FILE="$ENV_DIR/nomadtty.env"
+HTPASSWD_FILE="/etc/nginx/nomadtty.htpasswd"
 
 # ── Require root ────────────────────────────────────────────────────────────
 if [ "$(id -u)" -ne 0 ]; then
@@ -69,19 +85,48 @@ if ! id "$NOMADTTY_USER" >/dev/null 2>&1; then
     exit 1
 fi
 
+# ── Validate NOMADTTY_TLS / NOMADTTY_TLS_EMAIL ──────────────────────────────
+if [ "$NOMADTTY_TLS" != "none" ] && [ "$NOMADTTY_TLS" != "certbot" ]; then
+    echo "ERROR: NOMADTTY_TLS='$NOMADTTY_TLS' — must be 'none' or 'certbot'." >&2
+    exit 1
+fi
+if [ "$NOMADTTY_TLS" = "certbot" ]; then
+    if [ -z "$NOMADTTY_HOST" ]; then
+        echo "ERROR: NOMADTTY_TLS=certbot requires NOMADTTY_HOST to be set to a" >&2
+        echo "       real, publicly-resolvable domain pointing at this host." >&2
+        exit 1
+    fi
+    if [ -z "$NOMADTTY_TLS_EMAIL" ]; then
+        echo "ERROR: NOMADTTY_TLS=certbot requires NOMADTTY_TLS_EMAIL (contact" >&2
+        echo "       address for Let's Encrypt registration/renewal notices)." >&2
+        exit 1
+    fi
+fi
+
+# ── Validate NOMADTTY_BASIC_AUTH format ──────────────────────────────────────
+if [ -n "$NOMADTTY_BASIC_AUTH" ] && ! echo "$NOMADTTY_BASIC_AUTH" | grep -qE '^[^:]+:.+$'; then
+    echo "ERROR: NOMADTTY_BASIC_AUTH must be in 'user:password' format." >&2
+    exit 1
+fi
+
 echo "==> NomadTTY installer"
 echo "    Service user     : $NOMADTTY_USER"
 echo "    Install directory: $INSTALL_DIR"
 echo "    Session Manager   : 127.0.0.1:$SESSION_MANAGER_PORT (loopback only)"
 echo "    MCP server        : $MCP_HOST:$MCP_PORT"
 echo "    nginx host        : ${NOMADTTY_HOST:-_ (any hostname)}"
+echo "    TLS               : $NOMADTTY_TLS"
+echo "    Basic Auth        : $([ -n "$NOMADTTY_BASIC_AUTH" ] && echo enabled || echo disabled)"
 echo ""
 
 # ── Dependencies ────────────────────────────────────────────────────────────
-echo "==> Installing dependencies (ttyd tmux nginx nodejs npm git rsync openssl curl)..."
+DEPS="ttyd tmux nginx nodejs npm git rsync openssl curl ca-certificates"
+[ "$NOMADTTY_TLS" = "certbot" ] && DEPS="$DEPS certbot python3-certbot-nginx"
+[ -n "$NOMADTTY_BASIC_AUTH" ] && DEPS="$DEPS apache2-utils"
+echo "==> Installing dependencies ($DEPS)..."
 apt-get update -qq
-apt-get install -y --no-install-recommends \
-    ttyd tmux nginx nodejs npm git rsync openssl curl ca-certificates
+# shellcheck disable=SC2086 # DEPS is an intentional word-split package list
+apt-get install -y --no-install-recommends $DEPS
 
 # ── Fetch/update the application code ───────────────────────────────────────
 if [ -n "$LOCAL_SOURCE" ]; then
@@ -118,6 +163,27 @@ if [ -n "$NOMADTTY_HOST" ]; then
     sed -i "s/terminal\.yourdomain\.com/$NOMADTTY_HOST/" "$NGINX_CONF"
 else
     sed -i "s/server_name terminal\.yourdomain\.com;/server_name _;/" "$NGINX_CONF"
+fi
+
+if [ -n "$NOMADTTY_BASIC_AUTH" ]; then
+    echo "==> Configuring Basic Auth..."
+    BA_USER="${NOMADTTY_BASIC_AUTH%%:*}"
+    BA_PASS="${NOMADTTY_BASIC_AUTH#*:}"
+    printf '%s:%s\n' "$BA_USER" "$(openssl passwd -apr1 "$BA_PASS")" > "$HTPASSWD_FILE"
+    # nginx's worker process (www-data on Debian/Ubuntu) must be able to read
+    # this file, or every request 500s (confirmed: root:root 640 makes nginx
+    # log "open() ... failed (13: Permission denied)" and serve 500 instead
+    # of ever reaching the auth_basic check).
+    chown root:www-data "$HTPASSWD_FILE"
+    chmod 640 "$HTPASSWD_FILE"
+    # Insert into the `location /` block specifically (not server-level), so
+    # a future location added for e.g. an ACME challenge path isn't gated too.
+    sed -i "/location \/ {/a\\        auth_basic \"NomadTTY\";\\n        auth_basic_user_file $HTPASSWD_FILE;" "$NGINX_CONF"
+elif [ -f "$HTPASSWD_FILE" ]; then
+    # Basic Auth was disabled on a re-run — remove the stale directives/file
+    # rather than leaving an orphaned auth_basic_user_file reference.
+    sed -i '/auth_basic /d; /auth_basic_user_file/d' "$NGINX_CONF"
+    rm -f "$HTPASSWD_FILE"
 fi
 
 ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/nomadtty
@@ -164,13 +230,38 @@ systemctl daemon-reload
 systemctl enable --now nomadtty
 systemctl reload nginx
 
+# ── TLS (Let's Encrypt via certbot) ─────────────────────────────────────────
+TLS_STATUS="not requested"
+if [ "$NOMADTTY_TLS" = "certbot" ]; then
+    echo "==> Requesting a Let's Encrypt certificate for $NOMADTTY_HOST..."
+    # Failure here (DNS not pointing here yet, port 80 unreachable from the
+    # internet, rate-limited, etc.) must not abort the install — the site
+    # already works over HTTP at this point. certbot's nginx plugin edits
+    # $NGINX_CONF in place to add the HTTPS server block + redirect, and
+    # installs its own renewal timer/cron on Debian/Ubuntu automatically.
+    if certbot --nginx --non-interactive --agree-tos \
+        -m "$NOMADTTY_TLS_EMAIL" -d "$NOMADTTY_HOST" --redirect; then
+        TLS_STATUS="enabled (https://$NOMADTTY_HOST)"
+    else
+        TLS_STATUS="FAILED — see 'certbot certificates' / /var/log/letsencrypt/letsencrypt.log; site still works over HTTP"
+        echo "    WARNING: certbot failed. Common causes: NOMADTTY_HOST doesn't" >&2
+        echo "    resolve to this host yet, or port 80 isn't reachable from the" >&2
+        echo "    internet. Falling back to HTTP; re-run with the same env vars" >&2
+        echo "    once DNS/networking is fixed, or run 'certbot --nginx' by hand." >&2
+    fi
+fi
+
 # ── Health check ────────────────────────────────────────────────────────────
 echo ""
 echo "==> Verifying deployment..."
 LOCAL_IP="$(hostname -I | awk '{print $1}')"
 sleep 2   # give the backend a moment to start
 
-HTTP_STATUS="$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1/")"
+if [ -n "$NOMADTTY_BASIC_AUTH" ]; then
+    HTTP_STATUS="$(curl -s -o /dev/null -w "%{http_code}" -u "$NOMADTTY_BASIC_AUTH" "http://127.0.0.1/")"
+else
+    HTTP_STATUS="$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1/")"
+fi
 if [ "$HTTP_STATUS" = "200" ]; then
     echo "    HTTP 200 OK — Session Manager is responding."
 else
@@ -183,10 +274,16 @@ fi
 echo ""
 echo "✓  NomadTTY installed and running."
 echo ""
-if [ -n "$NOMADTTY_HOST" ]; then
+if [ "$NOMADTTY_TLS" = "certbot" ] && [ "$TLS_STATUS" != "${TLS_STATUS#enabled}" ]; then
+    echo "   Open:  https://$NOMADTTY_HOST"
+elif [ -n "$NOMADTTY_HOST" ]; then
     echo "   Open:  http://$NOMADTTY_HOST"
 else
     echo "   Open:  http://$LOCAL_IP"
+fi
+echo "   TLS:   $TLS_STATUS"
+if [ -n "$NOMADTTY_BASIC_AUTH" ]; then
+    echo "   Basic Auth: enabled (user: ${NOMADTTY_BASIC_AUTH%%:*})"
 fi
 echo ""
 if [ "$TOKEN_IS_NEW" = "1" ]; then

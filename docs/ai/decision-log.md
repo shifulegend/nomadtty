@@ -15,6 +15,64 @@
 
 ---
 
+### [2026-07-30] install.sh gets opt-in TLS (Certbot) and Basic Auth; default rate limiting moves into nginx/ttyd.conf itself
+- **Context**: The competitive-analysis backlog (`docs/competitive-analysis.md`) flagged
+  several SECURITY.md-recommended hardening items ("Enable HTTPS", "Add nginx auth_basic
+  or OAuth2 proxy", "Rate-limit nginx connections") as documented recommendations only,
+  never actually implemented or offered as a supported option.
+- **Decision**: `install.sh` gained `NOMADTTY_TLS=certbot` (+ `NOMADTTY_TLS_EMAIL`), which
+  runs `certbot --nginx --non-interactive --agree-tos -m ... -d ... --redirect` after
+  nginx is already live serving the domain over HTTP (required for the ACME HTTP-01
+  challenge); failure is caught and reported without aborting the install, since HTTP
+  already works at that point. `install.sh` also gained `NOMADTTY_BASIC_AUTH=user:pass`,
+  which generates an htpasswd file (`chown root:www-data`, `chmod 640` — see
+  `docs/ai/mistakes.md` 2026-07-30-002 for why the ownership matters) and injects
+  `auth_basic`/`auth_basic_user_file` into the `location /` block; unsetting it on a
+  re-run cleanly removes both. `nginx/ttyd.conf` itself (shared by Docker and
+  `install.sh`) gained a default `limit_req_zone`/`limit_req` (10r/s, burst 20) — on by
+  default rather than left as a recommendation, since it's a config-only change with no
+  operator action required.
+- **Alternatives considered**: A full OAuth2 reverse-proxy integration (e.g.
+  oauth2-proxy) instead of/alongside `auth_basic` — rejected as disproportionate scope
+  for this pass; `auth_basic` is a real, immediately-useful hardening layer that doesn't
+  require standing up a second service, and SECURITY.md's own recommendation already
+  treats `auth_basic` and an OAuth2 proxy as equivalent-tier options, not sequential
+  requirements. Defaulting `NOMADTTY_TLS` to `certbot` — rejected: most of this project's
+  documented audience deploys behind Tailscale (which already gets HTTPS via `tailscale
+  serve`), and forcing a public-DNS assumption (Certbot needs a real domain + reachable
+  port 80) onto every install would break the common Tailscale-only case; kept opt-in.
+  A `Content-Security-Policy` header — deferred, not implemented in this pass (see
+  `docs/ai/project-overview.md`'s TODO list): needs compatibility testing against kb.js's
+  inline WebSocket hook and ttyd's bundled xterm.js first, and shipping an untested CSP
+  header risks silently breaking the toolbar rather than hardening anything.
+- **Rationale**: These are the concrete, lowest-risk-per-value items from SECURITY.md's
+  own hardening table that could be turned from "documented recommendation" into "a real,
+  tested, one-flag option" without requiring a new standing service or an unverified
+  browser-security header change.
+- **Consequences**: New `install.sh` env vars documented in `.claude/rules/config.md` and
+  README.md. Certbot's actual cert issuance could not be verified end-to-end in this
+  session's sandbox (no real public DNS record can point at an ephemeral container) —
+  verified instead: the dependency installs correctly, validation fast-fails correctly
+  when `NOMADTTY_HOST`/`NOMADTTY_TLS_EMAIL` are missing, and a real (expected) certbot
+  failure against an unresolvable test domain does not abort the rest of the install.
+  Basic Auth was verified fully end-to-end (401/401/200 for no-creds/wrong-creds/
+  correct-creds) after fixing the ownership bug found during that verification.
+- **Owner**: claude (session doing a "no compromise" pass on the competitive-analysis
+  backlog, per explicit user direction).
+
+---
+```
+### [YYYY-MM-DD] <decision title>
+- **Context**: why a decision was needed
+- **Decision**: what was chosen
+- **Alternatives considered**: what else was evaluated
+- **Rationale**: why this was chosen
+- **Consequences**: what this means going forward
+- **Owner**: who made or approved the decision
+```
+
+---
+
 ### [2026-07-30] Docker/install.sh now run the Session Manager + MCP backend, not raw ttyd (unifies the two deployment models)
 - **Context**: A closed-source-style competitive analysis (`docs/competitive-analysis.md`)
   flagged the two-deployment-model split as NomadTTY's biggest structural gap. While
