@@ -3,6 +3,16 @@
 <!-- last updated: 2026-07-30 -->
 <!-- add an entry for every notable change: what, why, affected areas, commit -->
 
+### [2026-07-30] Tailnet-hosting zero-context validation (sub-agent 2) skipped
+- **Timestamp**: 2026-07-30 UTC
+- **Change**: No code change. Documented in `docs/ai/decision-log.md`'s matching entry:
+  provisioning sub-agent 2's environment hit a sandbox network-policy block on
+  Tailscale's control-plane registration (403 Forbidden, unrelated to NomadTTY); per the
+  environment's own "report, don't route around a 403" guidance, stopped and asked the
+  user, who chose to skip this validation phase and close out on sub-agent 1's PASS.
+  The scratch file holding the user-provided Tailscale auth key was securely deleted.
+- **Affected areas**: none (no repository files changed by this entry).
+
 ### [2026-07-30] install.sh: fall back to start-stop-daemon when no systemd is present
 - **Timestamp**: 2026-07-30 UTC
 - **Change**: Found via a live zero-context sub-agent install-validation run (fresh
