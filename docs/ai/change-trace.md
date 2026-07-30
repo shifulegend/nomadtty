@@ -17,6 +17,45 @@
 
 ---
 
+### [2026-07-30] Confirmed the tmux capture-pane line-wrap fix (d72c259/0cb6e62) is solid; full-suite flakiness reconfirmed as pre-existing, not a regression
+- **Timestamp**: 2026-07-30 14:29-14:43 UTC
+- **Change**: Re-ran the full 63-test Playwright suite on the same Colab
+  reference VM (`nomadtty-uxreview`, 2 vCPU/12GB) two additional times after
+  a prior single run (60 passed / 3 failed: `mcp-tools.spec.js:277`,
+  `terminal-interaction.spec.js:41`, `terminal-interaction.spec.js:81`).
+  Run 2: 63/63 passed (2.9m). Run 3: 63/63 passed (2.8m). No single test
+  failed in 2+ of the 3 runs, so per this task's own criterion this is
+  confirmed as the already-documented full-suite-under-load flakiness class
+  (see `tests/README.md`'s "A note on flakiness"), not a regression from
+  the line-wrap fix. No code change was needed as a result.
+  Also produced supplementary (non-permanent-suite) scroll evidence: a
+  one-off spec generating 500 lines of overflow content, toggling Hist,
+  swiping, and asserting real early content ("line 1 of overflow test
+  content") reappears over the ttyd WebSocket (not a DOM check) — 1 passed
+  (8.3s) on Colab, with before/after screenshots + video captured on the VM
+  (see `docs/ai/../../nomadtty-verification/2026-07-30/evidence/README.md`
+  for checksums/paths — files were left on the Colab VM rather than pulled
+  back locally, since the only transfer channel available under the
+  single-Colab-channel constraint is 8KB-capped MCP `type_command` text,
+  and the artifacts (373-600KB each) would have needed 100+ chunked
+  round-trips to move, judged not worth the time cost). Real AVD (Android
+  emulator) testing was not attempted: `/dev/kvm` is absent on this Colab
+  VM and no Android SDK tooling is installed, consistent with this
+  project's existing decision to use Playwright device emulation instead
+  of a full AVD in this class of environment.
+- **Rationale**: The fix (d72c259 "join wrapped tmux display lines in
+  capture-pane output", 0cb6e62 "tolerate trailing whitespace in
+  outputHasOwnLine") needed confirmation beyond the single mixed-result run
+  already on record, given 3 different tests failed than the 4 originally
+  targeted by that fix — verifying whether that was noise (this environment's
+  documented flaky-test class) or a real regression before treating the fix
+  as solid.
+- **Affected areas**: none (verification only; no source changes)
+- **Related decisions**: 2026-07-29 "Mobile UX validation uses Playwright
+  device emulation" (AVD infeasibility reconfirmed); 2026-07-29 "Mobile
+  touch-scroll re-enabled..." (scroll mechanism reconfirmed working)
+- **Related mistakes**: none new
+
 ### [2026-07-30] Verified the copy-mode scroll fix end-to-end on a real remote VM; found and fixed 3 test bugs plus a real perf regression
 - **Timestamp**: 2026-07-30 02:00-05:10 UTC
 - **Change**: This local sandbox stayed under sustained heavy load (7+ on 2
