@@ -199,21 +199,29 @@ test('Hist toggle reveals real scrollback via tmux copy-mode and never sends a P
   await page.locator('#kb-hist').tap();
   await expect(page.locator('#kb-hist')).toHaveClass(/on/);
 
-  // Simulate a downward swipe (finger moves down the screen) -- kb.js maps
-  // that to tmux's "scroll-up" (reveal older history), see src/kb.js's
-  // initTouchScroll comment for the direction rationale.
+  // Simulate repeated downward swipes (finger moves down the screen) --
+  // kb.js maps that to tmux's "scroll-up" (reveal older history), see
+  // src/kb.js's initTouchScroll comment for the direction rationale.
+  // Multiple separate gesture cycles (not one huge swipe): tmux's own
+  // scroll-up clamps harmlessly at the top of history, so overshooting is
+  // safe, and repeating the gesture -- like a real user swiping several
+  // times -- reaches arbitrarily far back regardless of exactly how many
+  // on-screen rows this viewport's pane happens to have, rather than
+  // depending on a single swipe's pixel distance being tuned just right.
   await page.evaluate(() => {
     const xterm = document.querySelector('.xterm');
     const rect = xterm.getBoundingClientRect();
     const x = rect.left + rect.width / 2;
     const startY = rect.top + rect.height / 2;
     const mk = (y) => new Touch({ identifier: 42, target: xterm, clientX: x, clientY: y });
-    xterm.dispatchEvent(new TouchEvent('touchstart', { touches: [mk(startY)], changedTouches: [mk(startY)], bubbles: true, cancelable: true }));
-    for (let i = 1; i <= 12; i++) {
-      const y = startY + (500 * i) / 12; // net downward drag
-      xterm.dispatchEvent(new TouchEvent('touchmove', { touches: [mk(y)], changedTouches: [mk(y)], bubbles: true, cancelable: true }));
+    for (let swipe = 0; swipe < 6; swipe++) {
+      xterm.dispatchEvent(new TouchEvent('touchstart', { touches: [mk(startY)], changedTouches: [mk(startY)], bubbles: true, cancelable: true }));
+      for (let i = 1; i <= 12; i++) {
+        const y = startY + (500 * i) / 12; // net downward drag
+        xterm.dispatchEvent(new TouchEvent('touchmove', { touches: [mk(y)], changedTouches: [mk(y)], bubbles: true, cancelable: true }));
+      }
+      xterm.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [mk(startY + 500)], bubbles: true, cancelable: true }));
     }
-    xterm.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [mk(startY + 500)], bubbles: true, cancelable: true }));
   });
 
   // The redraw arrives over the same live WS ttyd already holds (tmux

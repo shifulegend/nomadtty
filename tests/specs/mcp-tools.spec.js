@@ -256,10 +256,11 @@ test.describe('touch-history (copy-mode) / MCP interop', () => {
 
   test('send_keystroke still lands in the shell while the pane is mid-scroll', async ({ request, mcpSessionId, terminalId }) => {
     await enterCopyMode(request, terminalId);
-    // Short and fixed, not per-testId: terminalId already isolates this test
-    // from every other, and `echo <marker>` split into individual named
-    // keys must stay under MCP_MAX_KEYS_PER_CALL (32).
-    const marker = 'sk_scroll_ok';
+    // Short, fixed, and alphanumeric-only: terminalId already isolates this
+    // test from every other; `echo <marker>` split into individual named
+    // keys must stay under MCP_MAX_KEYS_PER_CALL (32) and every single-char
+    // key must match NAMED_KEY_RE ([A-Za-z0-9] only -- no underscore).
+    const marker = 'skscrollok';
     await callToolExpectOk(request, mcpSessionId, 'send_keystroke', {
       terminal_id: terminalId, mode: 'named',
       keys: `echo ${marker}`.split('').map((c) => c === ' ' ? 'Space' : c),
