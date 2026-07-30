@@ -181,6 +181,7 @@ test('mobile toolbar: CTRL modifier, Fn row toggle, and zoom all function on a t
 });
 
 test('Hist toggle reveals real scrollback via tmux copy-mode and never sends a PTY input byte', async ({ page }) => {
+  page.on('console', (msg) => console.log('BROWSER_CONSOLE:', msg.text()));
   const capture = captureTerminalSocket(page);
   await createSessionViaUi(page);
   await waitForTerminalReady(page);
