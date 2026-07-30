@@ -92,19 +92,26 @@ async function pollUntil(fn, { timeout = 8000, interval = 100 } = {}) {
 
 /**
  * True if `marker` appears as a complete line on its own (preceded by a
- * newline or the start of the capture, followed immediately by a newline)
- * -- i.e. specifically real command *output*, not the shell's echo of
- * typed *input*. A naive `content.includes(marker)` is fooled whenever the
- * marker text also appears inside the command that was typed to produce it
- * (e.g. `echo my_marker` echoes "my_marker" back before the command has
- * even run; `seq 1 300`'s own echoed input already contains the substring
+ * newline or the start of the capture, followed by a newline, optionally
+ * with trailing whitespace in between) -- i.e. specifically real command
+ * *output*, not the shell's echo of typed *input*. A naive
+ * `content.includes(marker)` is fooled whenever the marker text also
+ * appears inside the command that was typed to produce it (e.g.
+ * `echo my_marker` echoes "my_marker" back before the command has even
+ * run; `seq 1 300`'s own echoed input already contains the substring
  * "300"). This is the HTTP/tools.js-call equivalent of
  * tests/helpers/ws-capture.js's waitForOutputLine() for the WebSocket-based
  * browser suite -- see docs/ai/mistakes.md 2026-07-29-009 for the bug class.
+ * Trailing `[ \t]*` before the newline: server/mcp/tmux.js's capture-pane
+ * calls use `-J` (join tmux's own wrapped display lines back into one
+ * logical line -- otherwise a long marker silently splits mid-word across
+ * two "lines" whenever it exceeds the pane's column width), and `-J`'s own
+ * documented behavior is to preserve each line's trailing spaces, which a
+ * plain (non -J) capture would otherwise have trimmed.
  */
 function outputHasOwnLine(content, marker) {
   const escaped = String(marker).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(?:^|\\r?\\n)${escaped}\\r?\\n`).test(content);
+  return new RegExp(`(?:^|\\r?\\n)${escaped}[ \\t]*\\r?\\n`).test(content);
 }
 
 module.exports = {
