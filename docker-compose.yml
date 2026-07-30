@@ -6,10 +6,17 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      # MCP server (AI-agent terminal access) — comment out if you don't need it.
+      - "4200:4200"
     environment:
       # Optional: set your domain so the nginx server_name matches
       - NOMADTTY_HOST=terminal.yourdomain.com
-    # Uncomment to persist the tmux session across container restarts:
+      # Recommended: set your own token instead of relying on the one
+      # docker-entrypoint.sh auto-generates and prints on every container
+      # start (see `docker logs`) — a fixed token survives container
+      # restarts/recreation.
+      - MCP_AUTH_TOKEN=
+    # Uncomment to persist tmux sessions across container restarts:
     # volumes:
     #   - nomadtty-home:/root
 

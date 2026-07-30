@@ -4,7 +4,9 @@
 # Env vars live in an EnvironmentFile, not inline, so MCP_AUTH_TOKEN never shows
 # up in `systemctl cat`/unit file listings.
 #
-# Copy to /etc/systemd/system/nomadtty.service then:
+# This is a template: NOMADTTY_WORKING_DIR, NOMADTTY_NODE_BIN, and NOMADTTY_USER
+# are substituted by install.sh (see its "Configuring nomadtty service" step).
+# Copy to /etc/systemd/system/nomadtty.service after substitution, then:
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now nomadtty
 
@@ -13,12 +15,12 @@ Description=NomadTTY backend (Session Manager + MCP server)
 After=network.target
 
 [Service]
-WorkingDirectory=/home/ubuntu/nomadtty
+WorkingDirectory=NOMADTTY_WORKING_DIR
 EnvironmentFile=/etc/nomadtty/nomadtty.env
-ExecStart=/home/linuxbrew/.linuxbrew/bin/node server/main.js
+ExecStart=NOMADTTY_NODE_BIN server/main.js
 Restart=always
 RestartSec=3
-User=ubuntu
+User=NOMADTTY_USER
 
 [Install]
 WantedBy=multi-user.target

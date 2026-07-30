@@ -1,7 +1,56 @@
 # NomadTTY — Change Trace
 <!-- canonical source of truth | newest entries first -->
-<!-- last updated: 2026-07-29 -->
+<!-- last updated: 2026-07-30 -->
 <!-- add an entry for every notable change: what, why, affected areas, commit -->
+
+### [2026-07-30] Fixed Docker/install.sh 502 Bad Gateway; unified the two deployment models
+- **Timestamp**: 2026-07-30 UTC
+- **Change**: `Dockerfile`, `docker-entrypoint.sh`, `install.sh`, and
+  `systemd/nomadtty.service` now install Node.js and run
+  `server/main.js` (Session Manager + MCP) instead of raw `ttyd` directly —
+  matching what `nginx/ttyd.conf` already reverse-proxies to. `install.sh`
+  gained `NOMADTTY_INSTALL_DIR`/`NOMADTTY_BRANCH`/`NOMADTTY_LOCAL_SOURCE`
+  options, auto-generates (and preserves across re-runs)
+  `MCP_AUTH_TOKEN` into `/etc/nomadtty/nomadtty.env` (`chmod 600`), and
+  templates the systemd unit's working directory/node path/user the same
+  way it already templated `ttyd.service`'s port/user.
+  `docker-entrypoint.sh` auto-generates `MCP_AUTH_TOKEN` per container start
+  if not supplied and prints it once via `docker logs`. `docker-compose.yml`
+  publishes port `4200` and documents `MCP_AUTH_TOKEN`. README's Quick
+  Install/Docker/Manual Install/Architecture/Security Posture sections were
+  rewritten to match; the mermaid diagram now shows the real topology
+  (Session Manager + per-session ttyd + MCP server), not the old
+  single-ttyd/sub_filter model.
+- **Rationale**: See `docs/ai/mistakes.md` 2026-07-30-001 — the shipped
+  Docker/`install.sh` paths were completely broken (502 Bad Gateway on every
+  request) because `nginx/ttyd.conf` was updated in commit `55a5208` to
+  proxy to the Session Manager but nothing was ever updated to run it. This
+  is also the correct fix for the competitive-analysis backlog's "unify the
+  two deployment models" item — there was no working, separate "legacy
+  model" left to preserve.
+- **Affected areas**: `Dockerfile`, `docker-entrypoint.sh`, `install.sh`,
+  `systemd/nomadtty.service`, `docker-compose.yml`, `README.md`,
+  `.dockerignore` (new).
+- **Related commit**: (this session, branch
+  `claude/tool-competitive-analysis-3cap2l`)
+- **Related decisions**: `docs/ai/decision-log.md`'s 2026-07-30 entry.
+- **Related mistakes**: `docs/ai/mistakes.md` 2026-07-30-001.
+- **Verification**: Rebuilt the Docker image for real and confirmed `HTTP
+  200` (was `502`) plus a real session created via the HTTP API spawning
+  genuine `ttyd`/`tmux` processes and a correctly toolbar-injected
+  `/term/<id>/` page. Ran the equivalent `install.sh` flow inside a
+  disposable container (real `apt-get`, `npm ci`, `nginx -t`, MCP token
+  generation/preservation across re-runs, systemd-unit template
+  substitution all verified for real; `systemctl enable --now` itself could
+  not be exercised in this sandbox — no real systemd PID 1 or working nested
+  cgroup delegation is available here — so the generated unit's correctness
+  was instead proven by manually starting `node server/main.js` with the
+  exact generated env file and confirming the same working request chain
+  through nginx). `shellcheck install.sh` passes. Full Playwright suite:
+  61/63 passing; the 2 failures were confirmed to reproduce identically on
+  the pre-fix baseline (stashed changes, same commit) — pre-existing,
+  unrelated to this change (see `tests/README.md`'s flakiness section for
+  the newly-documented entry).
 
 ## Entry Template
 ```

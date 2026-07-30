@@ -1,6 +1,6 @@
 # NomadTTY — Decision Log
 <!-- canonical source of truth | newest entries first -->
-<!-- last updated: 2026-07-29 -->
+<!-- last updated: 2026-07-30 -->
 
 ## Entry Template
 ```
@@ -12,6 +12,55 @@
 - **Consequences**: what this means going forward
 - **Owner**: who made or approved the decision
 ```
+
+---
+
+### [2026-07-30] Docker/install.sh now run the Session Manager + MCP backend, not raw ttyd (unifies the two deployment models)
+- **Context**: A closed-source-style competitive analysis (`docs/competitive-analysis.md`)
+  flagged the two-deployment-model split as NomadTTY's biggest structural gap. While
+  scoping the fix, actually building and running the shipped `Dockerfile` surfaced a
+  live, severe bug (not just a gap): `docker run -d -p 80:80 nomadtty` — the README's own
+  documented quickstart — returned `502 Bad Gateway` on every request. See
+  `docs/ai/mistakes.md` 2026-07-30-001 for the full root cause: `nginx/ttyd.conf` was
+  rewritten in commit `55a5208` to proxy to the Node Session Manager (`127.0.0.1:4000`),
+  but `Dockerfile`/`docker-entrypoint.sh`/`install.sh`/`systemd/ttyd.service` were never
+  updated to actually run it — they still installed and exec'd raw `ttyd` on `:47821`
+  directly, which nginx no longer talks to.
+- **Decision**: `Dockerfile` and `docker-entrypoint.sh` now install Node.js/npm alongside
+  ttyd/tmux/nginx, `npm ci --omit=dev` the backend, and exec `node server/main.js`
+  (Session Manager + MCP, the architecture that already runs production
+  `terminal.pz.net`) as the foreground process, with nginx started in the background
+  proxying to it — exactly matching what `nginx/ttyd.conf` already expects. ttyd is no
+  longer run standalone by Docker/install.sh; it's spawned per-session by
+  `server/session-manager.js`, same as every other deployment of this architecture.
+  `docker-entrypoint.sh` auto-generates `MCP_AUTH_TOKEN` via `openssl rand -hex 32` when
+  the operator doesn't supply one via `-e`, and prints it once to `docker logs` — mirrors
+  Portainer's setup-token-in-logs pattern (researched in the competitive analysis) rather
+  than requiring the operator to invent a secret by hand.
+- **Alternatives considered**: Building an entirely separate installer/Dockerfile
+  specifically for the Session Manager + MCP model, leaving the legacy raw-ttyd path
+  as-is — rejected once the raw-ttyd path was confirmed actively broken (not just an
+  older, still-functional alternative); there is no working "legacy model" left to
+  preserve as a separate option, since its own nginx config was already pointed at the
+  new backend. Reverting `nginx/ttyd.conf` back to proxying raw ttyd directly instead —
+  rejected: the Session Manager (multi-session UI, MCP tools) is strictly more capable
+  and is what production already runs; reverting would be a regression, not a fix.
+- **Rationale**: The fix for the critical bug and the "unify the two deployment models"
+  backlog item are the same change — nginx already committed to the Session Manager
+  architecture; the correct fix makes the process behind it match, not the reverse.
+- **Consequences**: `EXPOSE`s port `4200` (MCP) in addition to `80`; operators must
+  `docker run -p 4200:4200` (and ideally `-e MCP_AUTH_TOKEN=...` of their own) to reach
+  the MCP server from outside the container — matches this project's existing
+  loopback-vs-LAN security posture (`docs/ai/decision-log.md`'s "MCP auth is a mandatory
+  bearer token" entry), just now reachable via Docker's own port-publishing model instead
+  of a bare-metal LAN bind. `docker-compose.yml`, `install.sh`, and
+  `systemd/nomadtty.service` needed the equivalent fix — tracked as the same change,
+  applied next in this session. Verified end-to-end: rebuilt image, real `docker run`,
+  `curl` returning the Session Manager UI (HTTP 200, not 502), a session created via the
+  real HTTP API spawning genuine `ttyd`+`tmux` processes inside the container, and the
+  resulting `/term/<id>/` page confirmed serving `kb.js`/`window._S`/xterm markers.
+- **Owner**: claude (session doing a "no compromise" pass on the competitive-analysis
+  backlog, per explicit user direction to prioritize every action item and fix them).
 
 ---
 
