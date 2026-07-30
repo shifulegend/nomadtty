@@ -78,7 +78,12 @@
    investigating a failure the automated suite doesn't pinpoint clearly, or when
    exploring genuinely new behavior not yet covered by `tests/specs/mcp-tools.spec.js`.
 
-## Future test targets (TODO)
-- [ ] shellcheck in CI on install.sh and docker-entrypoint.sh
-- [ ] nginx config syntax check in CI: `nginx -t -c nginx/ttyd.conf`
-- [ ] Wire server/session-manager.js + server/mcp/** into CI (`npm install`, boot, smoke-test)
+## CI coverage (`.github/workflows/ci.yml`)
+- [x] shellcheck on `install.sh` and `docker-entrypoint.sh` (`shellcheck` job)
+- [x] `docker build` of the shipped `Dockerfile` (`docker-build` job)
+- [x] nginx config syntax check: installs nginx, drops `nginx/ttyd.conf` into
+  `sites-available`/`sites-enabled` exactly like `install.sh` does, runs `nginx -t`
+  (`nginx-config` job)
+- [x] Full Playwright suite (`server/session-manager.js` + `server/mcp/**`, real
+  `npm ci`/boot/browser-driven smoke test) on every push/PR (`playwright` job) —
+  uploads the HTML report as an artifact on failure

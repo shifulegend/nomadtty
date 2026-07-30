@@ -44,8 +44,15 @@ and this project's version scheme follows [Semantic Versioning](https://semver.o
   top web-terminal projects on GitHub.
 
 ### Changed
-- `Dockerfile` base image bumped to `ubuntu:26.04` (previously `24.04`, via
-  an earlier Dependabot update that predates this changelog).
+- `Dockerfile` base image switched to `alpine:3.20` (previously `ubuntu:26.04`,
+  itself bumped from `24.04` via an earlier Dependabot update predating this
+  changelog) — ~4x smaller image (163MB vs. 686MB), zero functional change.
+  The original "Alpine has no ttyd package" rationale for avoiding it turned
+  out to be simply incorrect when actually checked.
+- CI (`.github/workflows/ci.yml`) gained an `nginx-config` job (validates
+  `nginx/ttyd.conf` with a real `nginx -t`) and a `playwright` job (runs the
+  full test suite on every push/PR) — previously only `shellcheck` and
+  `docker-build` ran in CI.
 
 ## [0.2.0]
 Everything up to and including the Session Manager + multi-session

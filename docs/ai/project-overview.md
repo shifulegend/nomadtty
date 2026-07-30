@@ -24,17 +24,17 @@ Dockerfile/install.sh still ran raw ttyd on the old port) meant every `docker ru
 
 | Component | Role | Version / source |
 |-----------|------|-----------------|
-| **ttyd** | Web terminal emulator (C binary), spawned per-session | apt: `ttyd` (MIT) |
+| **ttyd** | Web terminal emulator (C binary), spawned per-session | Docker: apk `ttyd` 1.7.7-r0; install.sh: apt `ttyd` (MIT) |
 | **xterm.js** | Terminal front-end (bundled inside ttyd) | bundled (MIT) |
-| **tmux** | PTY multiplexer — persistent sessions, one per `terminal_id` | apt: `tmux` (ISC) |
-| **nginx** | Reverse proxy to the Session Manager (`127.0.0.1:4000`); no HTML rewriting | apt: `nginx` (BSD-2) |
+| **tmux** | PTY multiplexer — persistent sessions, one per `terminal_id` | Docker: apk `tmux` 3.4-r1; install.sh: apt `tmux` (ISC) |
+| **nginx** | Reverse proxy to the Session Manager (`127.0.0.1:4000`); no HTML rewriting | Docker: apk `nginx` 1.26.3-r0; install.sh: apt `nginx` (BSD-2) |
 | **bash** | Shell spawned by ttyd inside tmux | system |
 | **vanilla JS** | Toolbar (`src/kb.js`) — zero runtime dependencies | none |
-| **Node.js** | Session Manager + MCP server backend | apt (`nodejs`/`npm`), `>=18` |
+| **Node.js** | Session Manager + MCP server backend | Docker: apk `nodejs` 20.15.1-r0; install.sh: apt `nodejs`/`npm`, `>=18` |
 | **@modelcontextprotocol/sdk** | MCP "Streamable HTTP" transport + protocol | npm (MIT) |
 | **zod** | Input schema validation for MCP tools | npm (MIT) |
-| **certbot** (optional) | Let's Encrypt TLS via `install.sh`'s `NOMADTTY_TLS=certbot` | apt: `certbot`, `python3-certbot-nginx` |
-| **Docker** | Packaging (`ubuntu:26.04` base) | multi-arch: amd64/arm64 |
+| **certbot** (optional) | Let's Encrypt TLS via `install.sh`'s `NOMADTTY_TLS=certbot` (bare-metal only) | apt: `certbot`, `python3-certbot-nginx` |
+| **Docker** | Packaging (`alpine:3.20` base — switched from `ubuntu:26.04` 2026-07-30, ~4x smaller image, see decision-log) | multi-arch: amd64/arm64 |
 | **systemd** | Service management (non-Docker installs) | system |
 
 `src/kb.js` remains raw JavaScript with zero runtime dependencies — no bundler,
@@ -117,7 +117,7 @@ of auth as a side effect.
 src/kb.js                  — mobile keyboard toolbar (core innovation, ~260 lines vanilla JS)
 nginx/ttyd.conf            — nginx vhost: reverse-proxies to the Session Manager; default rate limit
 systemd/nomadtty.service   — template unit for the Session Manager + MCP backend (substituted by install.sh)
-Dockerfile                 — multi-arch Docker image (ubuntu:26.04), runs server/main.js
+Dockerfile                 — multi-arch Docker image (alpine:3.20), runs server/main.js
 docker-compose.yml         — single-service compose deployment
 docker-entrypoint.sh       — starts nginx (bg), auto-generates MCP_AUTH_TOKEN, execs node server/main.js
 install.sh                 — curl-pipe installer for Debian/Ubuntu; installs the full backend + optional TLS/Basic Auth
@@ -167,14 +167,22 @@ NOTICE                     — third-party license attributions (required)
    an alternative to `install.sh`'s `NOMADTTY_TLS=certbot` for operators already on Tailscale.
 
 ## TODO / ASSUMPTION markers in this doc
-- UNKNOWN: ttyd exact version installed by apt on Ubuntu 26.04
-- UNKNOWN: xterm.js version bundled in that ttyd release
-- TODO: add version pinning to Dockerfile once tested
+- **Resolved (2026-07-30):** ttyd exact version is `1.7.7-r0` via Alpine 3.20's `apk`
+  (Docker path — see Stack table above); apt-installed version on the bare-metal
+  install.sh path varies by host OS and wasn't independently re-checked here.
+  xterm.js's exact bundled version inside that ttyd release remains unknown (ttyd
+  vendors it internally; not surfaced by the package manager) — low-value to chase
+  further unless a version-specific xterm.js bug is suspected.
+- **Resolved (2026-07-30):** deliberately **not** hard-pinning exact package versions —
+  see `.claude/rules/infra.md`'s Dockerfile rules for why (both apk's and apt's official
+  archives generally retain only the current version, so a hard pin risks the build
+  breaking outright once the archive rotates, a worse failure mode than an unpinned
+  "floating latest"). Actual versions recorded in the Stack table above instead.
 - TODO: real multi-user/multi-tenant access control (named sessions are not per-user
   accounts) — tracked in `docs/competitive-analysis.md`'s backlog, not yet implemented.
 - TODO: `Content-Security-Policy` nginx header (SECURITY.md's Low-priority item) —
   deliberately deferred, needs compatibility testing against kb.js's inline WS hook and
   ttyd's bundled xterm.js before enabling.
-- TODO: unify `install.sh`'s three env-var-only config surfaces (its own flags,
-  `nomadtty.env`, and no `.env.example` shipped) — tracked in
-  `docs/competitive-analysis.md`'s backlog.
+- TODO: Alpine image's `linux/arm64` build was not independently verified (no arm64
+  hardware/emulation available in the session that switched the base image) — verify
+  before relying on it if this becomes a blocker.

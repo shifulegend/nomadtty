@@ -3,6 +3,33 @@
 <!-- last updated: 2026-07-30 -->
 <!-- add an entry for every notable change: what, why, affected areas, commit -->
 
+### [2026-07-30] Docker base image switched to alpine:3.20 (~4x smaller); CI gained nginx-config and Playwright jobs
+- **Timestamp**: 2026-07-30 UTC
+- **Change**: `Dockerfile`'s base image is now `alpine:3.20` (was `ubuntu:26.04`) —
+  found the original "Alpine has no ttyd" rationale was simply wrong when re-checked
+  directly. `docker-entrypoint.sh` updated for Alpine's nginx vhost path
+  (`/etc/nginx/http.d/`). `.github/workflows/ci.yml` gained an `nginx-config` job
+  (validates `nginx/ttyd.conf` with a real `nginx -t`) and a `playwright` job (runs the
+  full 63-test suite on every push/PR, uploading the HTML report on failure) —
+  previously only `shellcheck` and `docker-build` ran in CI. `.claude/rules/tests.md`'s
+  "Future test targets" TODO list is now fully checked off.
+- **Rationale**: Closes competitive-analysis backlog items 18-20 (Tier 4 engineering
+  hygiene): CI wiring, version-pinning evaluation (deliberately not hard-pinned — see
+  decision-log), and base-image size.
+- **Affected areas**: `Dockerfile`, `docker-entrypoint.sh`, `.github/workflows/ci.yml`,
+  `.claude/rules/infra.md`, `.claude/rules/tests.md`, `docs/ai/project-overview.md`.
+- **Related decisions**: `docs/ai/decision-log.md`'s 2026-07-30 "Docker base image
+  switched..." entry.
+- **Related mistakes**: `docs/ai/mistakes.md` 2026-07-30-004 (the original Alpine
+  rationale was never actually true, not just outdated).
+- **Verification**: Real `docker build`+`docker run` of the exact committed
+  `Dockerfile`/`docker-entrypoint.sh` (200 status, real session creation spawning
+  genuine ttyd/tmux, correct toolbar injection, MCP auth enforced, `NOMADTTY_HOST`
+  substitution correct). Measured 163MB (Alpine) vs. 686MB (Ubuntu, freshly rebuilt for
+  a fair comparison) for an otherwise-identical image. `shellcheck docker-entrypoint.sh`
+  passes; `ci.yml` YAML syntax validated; the new `nginx-config` job's exact steps
+  tested directly beforehand.
+
 ### [2026-07-30] install.sh persists all its settings across re-runs; fixed a health-check set -e bug; added .env.example
 - **Timestamp**: 2026-07-30 UTC
 - **Change**: `install.sh` now reads `/etc/nomadtty/nomadtty.env` first and falls back to
