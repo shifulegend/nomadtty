@@ -3,6 +3,21 @@
 <!-- last updated: 2026-07-30 -->
 <!-- add an entry for every notable change: what, why, affected areas, commit -->
 
+### [2026-07-30] README: surface agent-friendly (MCP) alongside mobile-friendly in the opening tagline/Features
+- **Timestamp**: 2026-07-30 UTC
+- **Change**: The MCP/AI-agent-access capability was fully documented in README.md's
+  "Session Manager & MCP Server" section, but the opening tagline, intro paragraph, and
+  Features list only mentioned mobile-friendliness — a reader skimming the top of the
+  page (or the GitHub repo's "About" description, which doesn't mention MCP either) would
+  miss that this is an equally-real, load-bearing feature, not an afterthought. Updated
+  the tagline to "mobile-friendly, agent-friendly," added a sentence to the intro
+  paragraph about MCP-exposed sessions, and added an "Agent-friendly (MCP)" bullet to the
+  top of the Features list (linking to the existing deep-dive section) so it reads with
+  equal prominence to the mobile-toolbar features. The GitHub repo's "About" description
+  field itself isn't editable through any available tool in this session — a suggested
+  replacement string was given to the user to paste in manually.
+- **Affected areas**: `README.md`.
+
 ### [2026-07-30] Tailnet-hosting zero-context validation (sub-agent 2) skipped
 - **Timestamp**: 2026-07-30 UTC
 - **Change**: No code change. Documented in `docs/ai/decision-log.md`'s matching entry:
