@@ -11,7 +11,7 @@ Open a [GitHub Issue](https://github.com/shifulegend/nomadtty/issues) with:
 
 ## Support model
 
-This is a personal open-source project maintained on a best-effort basis. There is no SLA or guaranteed response time.
+This is a personal, source-available project maintained on a best-effort basis. There is no SLA or guaranteed response time.
 
 ## Security issues
 

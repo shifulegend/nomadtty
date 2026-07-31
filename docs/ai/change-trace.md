@@ -3,6 +3,26 @@
 <!-- last updated: 2026-07-30 -->
 <!-- add an entry for every notable change: what, why, affected areas, commit -->
 
+### [2026-07-30] Added GHCR publish job; opened PR to main
+- **Timestamp**: 2026-07-30 UTC
+- **Change**: Added a `publish` job to `.github/workflows/ci.yml` — builds and pushes a
+  real multi-arch (`linux/amd64,linux/arm64`) image to `ghcr.io/shifulegend/nomadtty`
+  (tags `:latest` and `:<sha>`) via `docker/login-action` + `docker/build-push-action`,
+  gated to only run on `push` to `main` (never on PR checks). Fixes the previously
+  broken Docker Image badge and README's "Run pre-built image" instructions, which
+  referenced an image that had never actually been published (the existing
+  `docker-build` job has always run with `push: false`). Opened a PR from
+  `claude/tool-competitive-analysis-3cap2l` to `main` — the first time this session's
+  accumulated work (502 bug fix, Alpine switch, TLS/Basic Auth/rate limiting, config
+  unification, `--help`/CHANGELOG, CI wiring, the 5 test-flakiness fixes, systemd
+  fallback, the PolyForm Shield relicense, this publish job) has been proposed for
+  `main`. See `docs/ai/decision-log.md`'s matching entry for the full root-cause
+  investigation into `main`'s broken CI/badges that prompted this.
+- **Verified**: `.github/workflows/ci.yml` re-validated as syntactically correct YAML
+  after the edit (`python3 -c "import yaml; yaml.safe_load(...)"`), matching the same
+  validation method used earlier in this session.
+- **Affected areas**: `.github/workflows/ci.yml`, `CHANGELOG.md`.
+
 ### [2026-07-30] Relicensed from MIT to PolyForm Shield 1.0.0
 - **Timestamp**: 2026-07-30 UTC
 - **Change**: `LICENSE` replaced with the full, verbatim PolyForm Shield 1.0.0 text

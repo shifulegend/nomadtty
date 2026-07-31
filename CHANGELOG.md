@@ -7,6 +7,12 @@ and this project's version scheme follows [Semantic Versioning](https://semver.o
 
 ## [Unreleased]
 
+### Added
+- CI now publishes a real multi-arch (`linux/amd64,linux/arm64`) image to
+  `ghcr.io/shifulegend/nomadtty` on every push to `main`, fixing the
+  previously broken Docker Image badge and "Run pre-built image"
+  instructions, which referenced an image that had never actually existed.
+
 ### Changed
 - **Breaking (licensing)**: NomadTTY is now licensed under [PolyForm Shield
   1.0.0](https://polyformproject.org/licenses/shield/1.0.0) instead of MIT —
