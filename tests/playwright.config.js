@@ -30,7 +30,11 @@ module.exports = defineConfig({
    * suite trades parallel speed for a deterministic shared-state server. */
   workers: 1,
   retries: 0,
-  reporter: [['list']],
+  /* 'html' output path matches .github/workflows/ci.yml's "Upload Playwright
+   * report on failure" step -- without it, that step always warned "No
+   * files were found" and silently never uploaded a real trace.zip/
+   * error-context.md on any CI failure, list-only never wrote them to disk. */
+  reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
   use: {
     baseURL: BASE_URL,
     trace: 'retain-on-failure',

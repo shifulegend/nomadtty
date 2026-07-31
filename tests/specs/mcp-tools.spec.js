@@ -154,13 +154,23 @@ test.describe('read_terminal_contents', () => {
 
   test('mode=full returns the whole buffer, untruncated for a small session', async ({ request, mcpSessionId, terminalId }) => {
     const marker = `full_mode_${test.info().testId}`;
-    // Longer poll budget than the 8s default (same rationale as
-    // get_screenshot's cold-start test above): confirmed failing on real
-    // GitHub-hosted CI (shared 2-core runner) at exactly the 8s boundary,
-    // while passing in well under 1s both in isolation and inside a full
-    // local suite run on faster hardware -- i.e. genuine CI subprocess-spawn
-    // latency, not a logic defect (see docs/ai/mistakes.md).
-    await runAndWaitForOutput(request, mcpSessionId, terminalId, `echo ${marker}`, marker, { timeout: 15000 });
+    // TEMPORARY diagnostic (see docs/ai/mistakes.md 2026-07-31-001): a
+    // { timeout: 15000 } bump did NOT fix this on real CI -- it still failed
+    // at ~15.3s, meaning the marker never lands at all in that environment,
+    // not just slowly. Dumping state on failure to find the real cause
+    // before guessing further.
+    try {
+      await runAndWaitForOutput(request, mcpSessionId, terminalId, `echo ${marker}`, marker, { timeout: 15000 });
+    } catch (e) {
+      const shot = await callToolExpectOk(request, mcpSessionId, 'get_screenshot', { terminal_id: terminalId }).catch((e2) => ({ error: String(e2) }));
+      const status = await callToolExpectOk(request, mcpSessionId, 'get_process_status', { terminal_id: terminalId }).catch((e2) => ({ error: String(e2) }));
+      const sessions = await callToolExpectOk(request, mcpSessionId, 'list_sessions', {}).catch((e2) => ({ error: String(e2) }));
+      console.error(`DIAG mode=full terminalId=${terminalId} marker=${marker}`);
+      console.error(`DIAG screenshot=${JSON.stringify(shot)}`);
+      console.error(`DIAG process_status=${JSON.stringify(status)}`);
+      console.error(`DIAG sessions=${JSON.stringify(sessions)}`);
+      throw e;
+    }
     const full = await callToolExpectOk(request, mcpSessionId, 'read_terminal_contents', { terminal_id: terminalId, mode: 'full' });
     expect(full.truncated).toBe(false);
     expect(outputHasOwnLine(full.content, marker)).toBe(true);
@@ -355,14 +365,26 @@ test.describe('send_keystroke', () => {
     await callToolExpectOk(request, mcpSessionId, 'type_command', { terminal_id: terminalId, text: `echo ${marker}`, submit: false });
     await callToolExpectOk(request, mcpSessionId, 'send_keystroke', { terminal_id: terminalId, mode: 'hex', hex: ['0d'] });
 
-    // Longer poll budget than the 8s default -- see the matching comment on
-    // the mode=full test above; confirmed failing on real CI at exactly the
-    // 8s boundary while passing in well under 1s locally (isolation and
-    // full-suite runs alike).
-    await pollUntil(async () => {
-      const shot = await callToolExpectOk(request, mcpSessionId, 'get_screenshot', { terminal_id: terminalId });
-      return outputHasOwnLine(shot.content, marker) ? shot : null;
-    }, { timeout: 15000 });
+    // TEMPORARY diagnostic (see docs/ai/mistakes.md 2026-07-31-001): a
+    // { timeout: 15000 } bump did NOT fix this on real CI -- it still failed
+    // at ~15.3s, meaning the marker never lands at all in that environment,
+    // not just slowly. Dumping state on failure to find the real cause
+    // before guessing further.
+    try {
+      await pollUntil(async () => {
+        const shot = await callToolExpectOk(request, mcpSessionId, 'get_screenshot', { terminal_id: terminalId });
+        return outputHasOwnLine(shot.content, marker) ? shot : null;
+      }, { timeout: 15000 });
+    } catch (e) {
+      const shot = await callToolExpectOk(request, mcpSessionId, 'get_screenshot', { terminal_id: terminalId }).catch((e2) => ({ error: String(e2) }));
+      const status = await callToolExpectOk(request, mcpSessionId, 'get_process_status', { terminal_id: terminalId }).catch((e2) => ({ error: String(e2) }));
+      const sessions = await callToolExpectOk(request, mcpSessionId, 'list_sessions', {}).catch((e2) => ({ error: String(e2) }));
+      console.error(`DIAG hex-mode terminalId=${terminalId} marker=${marker}`);
+      console.error(`DIAG screenshot=${JSON.stringify(shot)}`);
+      console.error(`DIAG process_status=${JSON.stringify(status)}`);
+      console.error(`DIAG sessions=${JSON.stringify(sessions)}`);
+      throw e;
+    }
   });
 
   test('rejects a named key outside the tmux key-notation allowlist', async ({ request, mcpSessionId, terminalId }) => {
