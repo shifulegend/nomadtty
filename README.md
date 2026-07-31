@@ -32,6 +32,8 @@ not just you.
 
 Captured over 5G. Sensitive fields (server IP, session ID, URL, branch name) are redacted.
 
+<video src="docs/assets/demo-showcase.mp4" controls muted playsinline width="360" title="NomadTTY running on iPhone 15 Pro Max"></video>
+
 | Toolbar + Claude Code help | iOS keyboard open |
 |:--------------------------:|:-----------------:|
 | ![Toolbar and Claude Code help](docs/assets/real-device-01-toolbar-claude-help.png) | ![iOS keyboard open](docs/assets/real-device-02-keyboard-open.png) |
