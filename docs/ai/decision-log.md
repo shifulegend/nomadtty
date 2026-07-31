@@ -57,6 +57,28 @@
   issues with proper RCA" request); investigation and fix both self-directed, no
   ambiguous product decision required user input.
 
+**Update (same day, PR #9 opened for real CI feedback)**: the `{ timeout: 15000 }` fix
+above was wrong. The user asked to push and watch real CI; a PR was opened
+specifically so `ci.yml` would run against this exact diff (pushing to a branch with
+no open PR doesn't trigger it). The same 2 tests failed again, now at ~15.3s — right at
+the *new* timeout, not evidence of "almost enough time." Added temporary diagnostic
+dumps (`get_screenshot`/`get_process_status`/`list_sessions` on failure), pushed again,
+and read the real CI failure logs: the marker was present but glued directly onto the
+echoed input with zero newline in between. Root cause: `full_mode_`/`hexsubmit_` are
+both exactly 10-char prefixes, and combined with Playwright's fixed-length `testId`,
+their markers land the full echoed command line at exactly 81 characters on GitHub's
+80-column pane — a bash/readline redraw quirk at that precise wrap boundary omits the
+newline before real output starts, which no timeout could ever fix. Corrected fix:
+changed both tests' typed command to `printf '\n%s\n' ${marker}`, whose own leading
+newline is a real output byte independent of exact column math; reverted the timeout
+bump back to the shared 8s default since it was never the actual issue. Also fixed
+`tests/playwright.config.js`'s reporter (was `list`-only, so `ci.yml`'s report-upload
+step always silently uploaded nothing on failure) so future CI failures get a real
+downloadable trace. See `docs/ai/mistakes.md` 2026-07-31-002 for full detail. This is
+the kind of case a live CI feedback loop (open a PR, read real failure logs, iterate)
+found that no amount of local reasoning or reproduction attempts could — the bug is
+inherently tied to the exact hostname length of GitHub's ephemeral runners.
+
 ---
 
 ### [2026-07-30] Added a GHCR publish job; opened the first PR to `main` since this session began

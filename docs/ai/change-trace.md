@@ -3,6 +3,28 @@
 <!-- last updated: 2026-07-31 -->
 <!-- add an entry for every notable change: what, why, affected areas, commit -->
 
+### [2026-07-31] Corrected fix for the 2 CI-only mcp-tools.spec.js failures: a bash/readline line-wrap glitch, not slow CI hardware
+- **Timestamp**: 2026-07-31 UTC
+- **Change**: The previous `{ timeout: 15000 }` fix (below) was wrong — pushed via a
+  PR opened specifically to get real CI feedback, the same 2 tests failed again at
+  ~15.3s, ruling out "just needs more time." Added temporary diagnostics, read the
+  real CI failure output, and found the marker glued directly onto its own echoed
+  input with zero newline in between: `full_mode_`/`hexsubmit_` are both exactly
+  10-char prefixes, and combined with Playwright's fixed-length `testId`, their
+  `echo ${marker}` commands land the echoed line at exactly 81 characters against
+  GitHub's runner's 80-column pane — a bash/readline redraw quirk at that precise
+  wrap boundary omits the newline before real output starts. Fixed by switching both
+  tests to `printf '\n%s\n' ${marker}`, whose own leading newline is a real output
+  byte independent of exact column math; reverted the timeout bump (never actually
+  the issue) back to the shared 8s default. Also fixed
+  `tests/playwright.config.js`'s reporter (`list`-only meant `ci.yml`'s report-upload
+  step always silently uploaded nothing on failure) so future failures get a real
+  downloadable trace/error-context.
+- **Verified**: Full local Playwright suite, 63/63; confirmed via the real PR #9 CI
+  run once pushed.
+- **Affected areas**: `tests/specs/mcp-tools.spec.js`, `tests/playwright.config.js`,
+  `tests/README.md`, `docs/ai/mistakes.md`, `docs/ai/decision-log.md`.
+
 ### [2026-07-31] Fixed the 2 real Playwright failures surfaced by CI's first genuine real-runner execution
 - **Timestamp**: 2026-07-31 UTC
 - **Change**: The account-level GitHub Actions billing lock documented in
