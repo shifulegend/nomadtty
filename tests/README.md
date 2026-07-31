@@ -150,3 +150,14 @@ step, a real mobile-UX responsiveness bug); three were test-side races/timeouts.
 `docs/ai/decision-log.md`'s matching 2026-07-30 entry and `docs/ai/mistakes.md`
 2026-07-30-006 for the full detail. Verified via 3 consecutive full-suite runs at
 63/63, not a single green run.
+
+**Resolved (2026-07-31):** the account-level GitHub Actions billing lock that had
+prevented any CI runner from ever being dispatched (see `docs/ai/decision-log.md`'s
+2026-07-30 "PR #8" entry) cleared, and the Playwright job's first genuine real-CI
+execution surfaced two more marginal-timing tests: `read_terminal_contents › mode=full
+returns the whole buffer` and `send_keystroke › hex mode: raw bytes reach the PTY`.
+Both passed in well under 1s in isolation and inside full local-suite runs (not a logic
+bug — checked before touching anything), but hit the shared 8s `pollUntil` default on
+GitHub's slower, shared 2-core runner. Given the test-scoped `{ timeout: 15000 }`
+pattern (matching `get_screenshot`'s existing cold-start test), not a shared-default
+change. See `docs/ai/mistakes.md` 2026-07-31-001.

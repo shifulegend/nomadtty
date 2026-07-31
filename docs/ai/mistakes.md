@@ -1,7 +1,58 @@
 # NomadTTY — Mistake Log
 <!-- canonical source of truth | newest entries first -->
-<!-- last updated: 2026-07-30 -->
+<!-- last updated: 2026-07-31 -->
 <!-- update immediately when a mistake is found; propagate lessons to engineering-rules.md -->
+
+---
+
+### [2026-07-31-001] CI's account-level billing lock cleared; first real Playwright run on GitHub surfaced 2 marginal-timing tests
+- **Timestamp**: 2026-07-31 UTC
+- **Summary**: A user request to "fix all CI failing issues with proper RCA" prompted
+  re-checking live CI state via the GitHub MCP tools rather than assuming the
+  2026-07-30 "account/repo-level GitHub Actions issue" (PR #8's `runner_id: 0`, no
+  `steps` array — see the matching `docs/ai/decision-log.md` entry) was still active.
+  It had cleared: `main`'s latest `CI` run (`30604770310`, attempt 2, commit `41264eb`)
+  dispatched real runners and actually executed all 4 jobs for the first time.
+  `Shellcheck`, `Docker build`, and `nginx-config` passed; the Playwright job failed
+  with 2 of 63 tests timing out — `read_terminal_contents › mode=full returns the whole
+  buffer` and `send_keystroke › hex mode: raw bytes reach the PTY`, both
+  `Error: pollUntil: condition not met within 8000ms`, each failing at exactly the
+  8000ms `pollUntil` default boundary (~8.2s wall time).
+- **Root cause**: Not a logic defect — verified before touching any code. Both tests,
+  run in isolation (3x each) and inside 3 consecutive full local 63-test suite runs on
+  this sandbox's hardware, passed in well under 1 second every time. This matches the
+  already-documented class from 2026-07-30-006: `server/mcp/tmux.js` shells out one
+  real `tmux`/`ps` subprocess per call (`execFileSync`), and GitHub's shared 2-core
+  `ubuntu-latest` runners are measurably slower for this workload than the hardware
+  this suite had previously only ever been verified on (this was, in fact, the very
+  first time the Playwright job had ever genuinely executed on real GitHub Actions
+  infrastructure — every prior CI run either predates the current `ci.yml`, or never
+  had a runner dispatched at all per the billing-lock issue).
+- **Affected files**: `tests/specs/mcp-tools.spec.js` (the 2 tests' poll calls),
+  `tests/README.md` (flakiness note).
+- **Detection method**: `mcp__github__get_job_logs` on the real failing CI run's
+  Playwright job (not assumed from the prior "infra-level" diagnosis); reproduction
+  attempted locally via `npx playwright test -g "<test name>"` x3 each, then 3
+  consecutive full-suite runs, all passing, before concluding this is CI-hardware-speed
+  latency rather than a product/test-race bug (per 2026-07-30-006's own prevention
+  rule: "confirmed to reproduce" claims must be checked, not assumed, and 2 of that
+  entry's 5 fixes turned out to be real bugs, not just slow CI — this investigation
+  ruled that out affirmatively for these 2 before applying a timeout fix).
+- **Correction**: Gave both tests a test-scoped `{ timeout: 15000 }` poll budget,
+  mirroring the existing `get_screenshot` cold-start test's identical pattern and
+  rationale — not a change to `tests/helpers/mcp-client.js`'s shared `pollUntil`
+  default, consistent with 2026-07-30-006's explicit reasoning for keeping such fixes
+  test-scoped rather than loosening every other test's timing assertions.
+- **Prevention rule**: When a long-standing CI failure is diagnosed as "infra, not
+  code" (no runner dispatched, expired logs, etc.), that diagnosis has an implicit
+  expiry — re-verify live CI state directly before assuming it's still true,
+  especially when asked to "fix CI issues," since an infra block clearing is exactly
+  the kind of external change that can silently turn a previously-correct "nothing to
+  fix here" into "there's now a real, never-before-seen signal to investigate." Real
+  CI hardware is not guaranteed to reproduce this project's own subprocess-spawn-heavy
+  timing characteristics identically to whatever sandbox previously verified the
+  suite — don't treat "the full suite passes locally" as final until it has also
+  actually been observed passing in the real CI environment at least once.
 
 ---
 
