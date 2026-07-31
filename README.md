@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/shifulegend/nomadtty/actions/workflows/ci.yml/badge.svg)](https://github.com/shifulegend/nomadtty/actions/workflows/ci.yml)
 [![License: PolyForm Shield 1.0.0](https://img.shields.io/badge/License-PolyForm_Shield_1.0.0-blue.svg)](https://polyformproject.org/licenses/shield/1.0.0)
-[![Docker Image](https://img.shields.io/badge/ghcr.io-nomadtty-blue.svg)](https://ghcr.io/shifulegend/nomadtty)
+[![Publish](https://github.com/shifulegend/nomadtty/actions/workflows/publish.yml/badge.svg)](https://github.com/shifulegend/nomadtty/actions/workflows/publish.yml)
 
 **A mobile-friendly, agent-friendly web terminal you can access from anywhere.**
 
