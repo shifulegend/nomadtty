@@ -20,6 +20,10 @@ not just you.
 
 ## Demo
 
+### Video (iPhone 15 Pro Max)
+
+<video src="docs/assets/demo-showcase.mp4" controls muted playsinline width="480" title="NomadTTY running on iPhone 15 Pro Max"></video>
+
 ### Desktop (1280 × 720)
 
 ![NomadTTY desktop demo](docs/assets/demo-desktop.gif)
@@ -28,11 +32,9 @@ not just you.
 
 ![Toolbar with CTRL modifier active and F1–F12 row open](docs/assets/screenshot-toolbar-fn.png)
 
-### iPhone 15 Pro Max
+### iPhone 15 Pro Max (screenshots)
 
 Captured over 5G. Sensitive fields (server IP, session ID, URL, branch name) are redacted.
-
-<video src="docs/assets/demo-showcase.mp4" controls muted playsinline width="360" title="NomadTTY running on iPhone 15 Pro Max"></video>
 
 | Toolbar + Claude Code help | iOS keyboard open |
 |:--------------------------:|:-----------------:|
