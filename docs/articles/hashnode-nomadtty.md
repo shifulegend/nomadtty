@@ -25,7 +25,7 @@ ESC is gone. Ctrl is gone. Tab is buried in a symbol menu. Arrow keys don't exis
 
 The standard workaround is [Termius](https://termius.com/) — a polished mobile SSH client with a keyboard that actually includes those keys. It works. It's also $8–$14/month, proprietary, and SSH-only. If your workflow involves Tailscale, a web-based tool, or anything that isn't a raw SSH daemon, Termius isn't enough.
 
-This post walks through **NomadTTY** — an open-source, self-hosted web terminal that runs in any browser and ships with a touch-friendly keyboard toolbar built in. No app. No subscription. One Docker command.
+This post walks through **NomadTTY** — a source-available, self-hosted web terminal that runs in any browser and ships with a touch-friendly keyboard toolbar built in. No app. No subscription. One Docker command.
 
 ## What NomadTTY Is
 

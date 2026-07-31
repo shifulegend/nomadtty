@@ -15,6 +15,52 @@
 
 ---
 
+### [2026-07-30] Added a GHCR publish job; opened the first PR to `main` since this session began
+- **Context**: A user screenshot of the GitHub mobile app viewing this feature branch's
+  README surfaced two visible problems: the CI badge showed "failing," and the Docker
+  Image badge rendered as a broken placeholder. Investigation (read-only, done in plan
+  mode) found: (1) both badges are unqualified and therefore reflect `main`'s state, not
+  this branch's — `main` has failed every CI run since 2026-07-29 15:08:49 (16 straight
+  failures, each completing in ~4-10s, far too fast for a real script/build failure;
+  historical logs have since expired/been purged and could not be recovered via any
+  available method); (2) the Docker badge is broken because **no image has ever been
+  published to `ghcr.io/shifulegend/nomadtty`** — the only workflow file, `ci.yml`, has
+  always run its Docker build with `push: false`, yet `README.md` documents `docker run
+  ghcr.io/shifulegend/nomadtty:latest` as if a real image exists there. Also confirmed:
+  every fix from this entire session (502 bug, Alpine switch, TLS/Basic Auth/rate
+  limiting, config unification, the 5 test-flakiness fixes, the systemd fallback, the
+  relicense) has been sitting only on `claude/tool-competitive-analysis-3cap2l` and was
+  never merged to `main`.
+- **Decision**: Added a new `publish` job to `.github/workflows/ci.yml` (gated
+  `if: github.event_name == 'push' && github.ref == 'refs/heads/main'`, so it never runs
+  on PR checks) that builds and pushes a real multi-arch (`linux/amd64,linux/arm64`)
+  image to `ghcr.io/shifulegend/nomadtty:latest` + `:<sha>` using `docker/login-action`
+  with the repo's own `GITHUB_TOKEN` (no new secret). Opened a PR from
+  `claude/tool-competitive-analysis-3cap2l` to `main` rather than merging directly (the
+  user's explicit choice, so the full multi-commit diff gets reviewed first).
+- **Alternatives considered**: merging directly to `main` instead of opening a PR —
+  offered via `AskUserQuestion`, user chose the PR path. Just fixing the README to stop
+  claiming a pre-built image exists (no new CI job) — offered, user chose to add the
+  real publish job instead, since keeping the badge/instructions honest going forward
+  is worth more than a one-time doc correction.
+- **Rationale**: GitHub Actions' `pull_request` trigger evaluates the workflow file from
+  the PR's **head branch**, not `main`'s stale copy — so opening this PR alone (without
+  any merge) triggers a fresh CI run using this branch's already-locally-verified 4-job
+  `ci.yml`, giving readable, live logs where `main`'s historical ones had expired. This
+  was the key insight that made a PR (rather than a merge, or blindly re-running
+  something with no diagnostic value) the right next step.
+- **Consequences**: the Docker Image badge will keep showing broken until this PR is
+  merged and the `publish` job runs once for real (nothing to publish until then — this
+  is expected, not a bug). The `publish` job's arm64 leg is the first real end-to-end
+  verification of the Dockerfile's documented (but previously unverified per an earlier
+  2026-07-30 entry) multi-arch target. Once merged, `main` gains the working CI
+  configuration and every accumulated fix from this session in one step.
+- **Owner**: investigation and fix path proposed by the assistant during a plan-mode
+  turn triggered by the user's screenshot; both open decisions (PR vs. direct merge,
+  publish job vs. docs-only fix) were confirmed by the user via `AskUserQuestion`.
+
+---
+
 ### [2026-07-30] Relicensed from MIT to PolyForm Shield 1.0.0
 - **Context**: User wanted to protect against someone taking NomadTTY and launching a
   competing hosted product/service built on it, while explicitly not wanting to block
