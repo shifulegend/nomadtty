@@ -3,6 +3,23 @@
 <!-- last updated: 2026-07-31 -->
 <!-- add an entry for every notable change: what, why, affected areas, commit -->
 
+### [2026-07-31] Fixed the 2 real Playwright failures surfaced by CI's first genuine real-runner execution
+- **Timestamp**: 2026-07-31 UTC
+- **Change**: The account-level GitHub Actions billing lock documented in
+  `docs/ai/decision-log.md`'s 2026-07-30 "PR #8" entry has cleared — confirmed via a
+  fresh, live check of `main`'s CI run history (not assumed). `main`'s latest `CI` run
+  (`30604770310`) genuinely executed for the first time, passing 3 of 4 jobs outright
+  and surfacing 2 real Playwright timing failures (`mode=full`, `send_keystroke hex
+  mode`), both hitting the shared 8s `pollUntil` default under real CI hardware.
+  Verified (isolated + 3x full-suite local reruns, all passing in <1s) this is
+  CI-hardware-speed latency, not a logic bug, then applied the existing test-scoped
+  `{ timeout: 15000 }` precedent (already used for `get_screenshot`'s cold-start test)
+  to both.
+- **Verified**: 3 consecutive full local Playwright suite runs, 63/63 passing each
+  time, after the fix.
+- **Affected areas**: `tests/specs/mcp-tools.spec.js`, `tests/README.md`,
+  `docs/ai/mistakes.md`, `docs/ai/decision-log.md`.
+
 ### [2026-07-31] Replaced dead ghcr-badge.egpl.dev Docker Image badge with a static shields.io badge
 - **Timestamp**: 2026-07-31 UTC
 - **Change**: README's third badge (`Docker Image`) pointed at

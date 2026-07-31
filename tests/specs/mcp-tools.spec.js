@@ -154,7 +154,13 @@ test.describe('read_terminal_contents', () => {
 
   test('mode=full returns the whole buffer, untruncated for a small session', async ({ request, mcpSessionId, terminalId }) => {
     const marker = `full_mode_${test.info().testId}`;
-    await runAndWaitForOutput(request, mcpSessionId, terminalId, `echo ${marker}`, marker);
+    // Longer poll budget than the 8s default (same rationale as
+    // get_screenshot's cold-start test above): confirmed failing on real
+    // GitHub-hosted CI (shared 2-core runner) at exactly the 8s boundary,
+    // while passing in well under 1s both in isolation and inside a full
+    // local suite run on faster hardware -- i.e. genuine CI subprocess-spawn
+    // latency, not a logic defect (see docs/ai/mistakes.md).
+    await runAndWaitForOutput(request, mcpSessionId, terminalId, `echo ${marker}`, marker, { timeout: 15000 });
     const full = await callToolExpectOk(request, mcpSessionId, 'read_terminal_contents', { terminal_id: terminalId, mode: 'full' });
     expect(full.truncated).toBe(false);
     expect(outputHasOwnLine(full.content, marker)).toBe(true);
@@ -349,10 +355,14 @@ test.describe('send_keystroke', () => {
     await callToolExpectOk(request, mcpSessionId, 'type_command', { terminal_id: terminalId, text: `echo ${marker}`, submit: false });
     await callToolExpectOk(request, mcpSessionId, 'send_keystroke', { terminal_id: terminalId, mode: 'hex', hex: ['0d'] });
 
+    // Longer poll budget than the 8s default -- see the matching comment on
+    // the mode=full test above; confirmed failing on real CI at exactly the
+    // 8s boundary while passing in well under 1s locally (isolation and
+    // full-suite runs alike).
     await pollUntil(async () => {
       const shot = await callToolExpectOk(request, mcpSessionId, 'get_screenshot', { terminal_id: terminalId });
       return outputHasOwnLine(shot.content, marker) ? shot : null;
-    });
+    }, { timeout: 15000 });
   });
 
   test('rejects a named key outside the tmux key-notation allowlist', async ({ request, mcpSessionId, terminalId }) => {
