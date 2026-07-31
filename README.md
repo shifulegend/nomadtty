@@ -22,7 +22,7 @@ not just you.
 
 ### Video (iPhone 15 Pro Max)
 
-<video src="docs/assets/demo-showcase.mp4" controls muted playsinline width="480" title="NomadTTY running on iPhone 15 Pro Max"></video>
+https://github.com/user-attachments/assets/ea188347-9bc2-47a4-934a-94ffd9715e75
 
 ### Desktop (1280 × 720)
 
