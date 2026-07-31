@@ -1,7 +1,23 @@
 # NomadTTY — Change Trace
 <!-- canonical source of truth | newest entries first -->
-<!-- last updated: 2026-07-30 -->
+<!-- last updated: 2026-07-31 -->
 <!-- add an entry for every notable change: what, why, affected areas, commit -->
+
+### [2026-07-31] Replaced dead ghcr-badge.egpl.dev Docker Image badge with a static shields.io badge
+- **Timestamp**: 2026-07-31 UTC
+- **Change**: README's third badge (`Docker Image`) pointed at
+  `https://ghcr-badge.egpl.dev/shifulegend/nomadtty/size`, which rendered as a broken
+  "?" placeholder. Root cause was two-fold: (1) `ghcr-badge.egpl.dev` itself now returns
+  HTTP 503 "Service Suspended" for any repo — the third-party badge service is dead, not
+  just this package; (2) even if it were alive, `ghcr.io/shifulegend/nomadtty` doesn't
+  exist yet (`gh api /users/shifulegend/packages/container/nomadtty` → 404), since the
+  publish job added 2026-07-30 has never successfully run (blocked by the same
+  account-level GitHub Actions billing lock documented in decision-log.md's PR #8 entry).
+  Replaced with a static `img.shields.io/badge/ghcr.io-nomadtty-blue.svg` badge (verified
+  200 OK) that doesn't depend on a third-party dynamic-badge service or the package
+  already existing — still links through to the GHCR package page.
+- **Verified**: `curl -s -o /dev/null -w "%{http_code}" https://img.shields.io/badge/ghcr.io-nomadtty-blue.svg` → 200.
+- **Affected areas**: `README.md`.
 
 ### [2026-07-30] Added GHCR publish job; opened PR to main
 - **Timestamp**: 2026-07-30 UTC
