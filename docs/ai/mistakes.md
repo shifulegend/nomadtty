@@ -5,6 +5,73 @@
 
 ---
 
+### [2026-07-31-002] The real cause of the 2 CI-only mcp-tools.spec.js failures: a bash/readline line-wrap glitch at an exact 80-column boundary, not slow hardware
+- **Timestamp**: 2026-07-31 UTC
+- **Summary**: 2026-07-31-001's `{ timeout: 15000 }` fix was wrong (see that entry's
+  "Update"). Added temporary diagnostics (dumping `get_screenshot`/`get_process_status`/
+  `list_sessions` on failure) and pushed to PR #9 to get real CI-side visibility instead
+  of guessing further. The dump showed the marker WAS present in the capture, but glued
+  directly onto the echoed input with **zero newline between them**:
+  `"...e225882c27d95ee4b41efull_mode_...e225882c27d95ee4b41e"` — the input echo's copy
+  of the marker immediately followed by the real output's copy, no `\n` in between.
+  `outputHasOwnLine()` requires a genuine newline before a match, so this could never
+  succeed, at any timeout.
+- **Root cause**: The full echoed line — `runner@<CI-runner-hostname>:~$ echo <marker>`
+  — happened to be **exactly 81 characters** against the pane's 80-column width for
+  these 2 tests specifically: `full_mode_` and `hexsubmit_` are both exactly 10-char
+  prefixes, and Playwright's `test.info().testId` contributes a fixed-length suffix, so
+  both markers land at the same total length. At that precise 1-char-over-width
+  boundary, bash/readline's line redraw has a well-known quirk: it doesn't emit an
+  explicit newline before the command's real output starts, because its own internal
+  cursor-row bookkeeping is off by exactly one at the wrap edge. This is inherent
+  bash/readline/terminal behavior, not a NomadTTY server bug — a real user hitting this
+  exact same column coincidence in their own shell would see the identical glued-together
+  rendering. It only reproduced in real CI (never locally, across many isolated and
+  full-suite runs) because it depends on the exact character length of `runner@<hostname>`
+  in the shell prompt — GitHub's ephemeral runner hostnames (e.g. `runnervmvrwv9`) happen
+  to produce the exact length that lands other tests' *different-length* marker prefixes
+  off this boundary, while these 2 specific prefixes land squarely on it. No amount of
+  extra `pollUntil` time could ever fix this, since the missing newline is permanent for
+  that command, not delayed.
+- **Affected files**: `tests/specs/mcp-tools.spec.js` (`mode=full`, `send_keystroke hex
+  mode` tests), `tests/playwright.config.js` (see below).
+- **Detection method**: Real CI failure logs read via `mcp__github__get_job_logs`
+  (not locally reproducible at all — 3x isolated + multiple full-suite local runs all
+  passed cleanly throughout this entire investigation). The diagnostic `console.error`
+  dump of the exact raw `get_screenshot` content was what actually surfaced the glued
+  text; without it, the missing-newline byte-level detail would not have been visible
+  from a bare pass/fail poll timeout. Also fixed a related visibility gap while at it:
+  `tests/playwright.config.js`'s `reporter: [['list']]` meant `tests/playwright-report/`
+  never existed, so `.github/workflows/ci.yml`'s "Upload Playwright report on failure"
+  step always silently uploaded nothing (`No files were found`) on every prior real CI
+  failure — added the `html` reporter so future failures' `trace.zip`/
+  `error-context.md` actually get captured as a downloadable CI artifact.
+- **Correction**: Changed both tests' typed command from `echo ${marker}` to
+  `printf '\n%s\n' ${marker}` — printf's own leading `\n` is a real byte emitted by the
+  command's OUTPUT itself, independent of exactly where the input-echo happened to wrap,
+  so a genuine newline is now guaranteed before the marker regardless of prompt/hostname
+  length. Reverted the now-inaccurate `{ timeout: 15000 }` bump and its "CI hardware
+  latency" comment back to the shared 8s default, since the real fix doesn't need extra
+  time at all (both tests pass in under 1s locally). Removed the temporary diagnostic
+  `console.error` dumps once the real cause was confirmed.
+- **Prevention rule**: A test marker built from a fixed prefix + a fixed-length ID
+  (like Playwright's `testId`) is not immune to accidentally landing on a terminal's
+  exact column-wrap boundary just because it "looks arbitrary" — the total length is
+  actually deterministic per prefix, so two different-sounding tests can coincidentally
+  share the exact same total length and hit the exact same environment-dependent
+  boundary. Any test asserting on a *command's real output* via a line-boundary-sensitive
+  check (like `outputHasOwnLine()`) should make the command itself emit an
+  unambiguous leading newline in its OUTPUT (e.g. `printf '\n%s\n' ...`), not rely on
+  the shell's own input-echo/prompt rendering to have wrapped or not — the latter is
+  environment-dependent (varies with hostname length, prompt customization, terminal
+  width) in a way the test author cannot fully control or predict. When a `pollUntil`
+  times out at a suspiciously exact number close to the configured timeout on the very
+  first fix attempt, treat "maybe it just needs more time" with real skepticism —
+  dump the actual intermediate state (a slow but eventually-succeeding condition looks
+  very different from a permanently-false one) before assuming a duration is the issue.
+
+---
+
 ### [2026-07-31-001] CI's account-level billing lock cleared; first real Playwright run on GitHub surfaced 2 marginal-timing tests
 - **Timestamp**: 2026-07-31 UTC
 - **Summary**: A user request to "fix all CI failing issues with proper RCA" prompted
@@ -53,6 +120,14 @@
   timing characteristics identically to whatever sandbox previously verified the
   suite — don't treat "the full suite passes locally" as final until it has also
   actually been observed passing in the real CI environment at least once.
+- **Update (same day)**: the `{ timeout: 15000 }` fix above was WRONG — pushed to PR #9,
+  the real CI run failed again on the exact same 2 tests, this time at ~15.3s (i.e.
+  right at the *new* timeout), not just "not enough time yet." That ruled out the
+  "CI hardware is just slower" theory outright: a condition that would eventually
+  become true doesn't fail at almost precisely the timeout twice in a row. See
+  2026-07-31-002 for the actual root cause and real fix — this entry is left as-is
+  (not rewritten) as the record of the investigation path, per this project's own
+  convention of documenting false starts, not just final answers.
 
 ---
 

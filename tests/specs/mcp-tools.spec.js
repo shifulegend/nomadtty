@@ -154,23 +154,20 @@ test.describe('read_terminal_contents', () => {
 
   test('mode=full returns the whole buffer, untruncated for a small session', async ({ request, mcpSessionId, terminalId }) => {
     const marker = `full_mode_${test.info().testId}`;
-    // TEMPORARY diagnostic (see docs/ai/mistakes.md 2026-07-31-001): a
-    // { timeout: 15000 } bump did NOT fix this on real CI -- it still failed
-    // at ~15.3s, meaning the marker never lands at all in that environment,
-    // not just slowly. Dumping state on failure to find the real cause
-    // before guessing further.
-    try {
-      await runAndWaitForOutput(request, mcpSessionId, terminalId, `echo ${marker}`, marker, { timeout: 15000 });
-    } catch (e) {
-      const shot = await callToolExpectOk(request, mcpSessionId, 'get_screenshot', { terminal_id: terminalId }).catch((e2) => ({ error: String(e2) }));
-      const status = await callToolExpectOk(request, mcpSessionId, 'get_process_status', { terminal_id: terminalId }).catch((e2) => ({ error: String(e2) }));
-      const sessions = await callToolExpectOk(request, mcpSessionId, 'list_sessions', {}).catch((e2) => ({ error: String(e2) }));
-      console.error(`DIAG mode=full terminalId=${terminalId} marker=${marker}`);
-      console.error(`DIAG screenshot=${JSON.stringify(shot)}`);
-      console.error(`DIAG process_status=${JSON.stringify(status)}`);
-      console.error(`DIAG sessions=${JSON.stringify(sessions)}`);
-      throw e;
-    }
+    // A bare `echo ${marker}` command is unsafe here: this marker's exact
+    // length (10-char prefix + Playwright's fixed-length testId) combined
+    // with a CI runner's exact shell prompt length ("runner@<hostname>:~$ ")
+    // can land the typed-command echo at PRECISELY 81 chars on an 80-col
+    // pane. At that exact wrap boundary bash/readline's redraw doesn't emit
+    // a newline before the command's real output starts, so the output
+    // glues directly onto the echoed input with zero newline between them
+    // (confirmed via a real CI failure's raw capture -- see
+    // docs/ai/mistakes.md 2026-07-31-002). outputHasOwnLine() then never
+    // matches, since there's no genuine line break, and no poll timeout
+    // fixes that (confirmed: bumping 8s->15s made no difference). A leading
+    // literal '\n' in printf's own OUTPUT (not the input-echo) guarantees a
+    // real newline byte before the marker regardless of exact column math.
+    await runAndWaitForOutput(request, mcpSessionId, terminalId, `printf '\\n%s\\n' ${marker}`, marker);
     const full = await callToolExpectOk(request, mcpSessionId, 'read_terminal_contents', { terminal_id: terminalId, mode: 'full' });
     expect(full.truncated).toBe(false);
     expect(outputHasOwnLine(full.content, marker)).toBe(true);
@@ -362,29 +359,21 @@ test.describe('send_keystroke', () => {
 
   test('hex mode: raw bytes reach the PTY (0d submits a pending command like Enter)', async ({ request, mcpSessionId, terminalId }) => {
     const marker = `hexsubmit_${test.info().testId}`;
-    await callToolExpectOk(request, mcpSessionId, 'type_command', { terminal_id: terminalId, text: `echo ${marker}`, submit: false });
+    // See the matching comment on the mode=full test above: a bare
+    // `echo ${marker}` command's echoed length can coincidentally land
+    // exactly on a CI runner's 80-col wrap boundary (this marker's 10-char
+    // prefix happens to match "full_mode_"'s length exactly), gluing the
+    // real output onto the input-echo line with no newline in between --
+    // confirmed via a real CI failure's raw capture, not a timing issue (a
+    // { timeout: 15000 } bump made no difference). printf's own leading
+    // '\n' guarantees a real newline byte in the output regardless.
+    await callToolExpectOk(request, mcpSessionId, 'type_command', { terminal_id: terminalId, text: `printf '\\n%s\\n' ${marker}`, submit: false });
     await callToolExpectOk(request, mcpSessionId, 'send_keystroke', { terminal_id: terminalId, mode: 'hex', hex: ['0d'] });
 
-    // TEMPORARY diagnostic (see docs/ai/mistakes.md 2026-07-31-001): a
-    // { timeout: 15000 } bump did NOT fix this on real CI -- it still failed
-    // at ~15.3s, meaning the marker never lands at all in that environment,
-    // not just slowly. Dumping state on failure to find the real cause
-    // before guessing further.
-    try {
-      await pollUntil(async () => {
-        const shot = await callToolExpectOk(request, mcpSessionId, 'get_screenshot', { terminal_id: terminalId });
-        return outputHasOwnLine(shot.content, marker) ? shot : null;
-      }, { timeout: 15000 });
-    } catch (e) {
-      const shot = await callToolExpectOk(request, mcpSessionId, 'get_screenshot', { terminal_id: terminalId }).catch((e2) => ({ error: String(e2) }));
-      const status = await callToolExpectOk(request, mcpSessionId, 'get_process_status', { terminal_id: terminalId }).catch((e2) => ({ error: String(e2) }));
-      const sessions = await callToolExpectOk(request, mcpSessionId, 'list_sessions', {}).catch((e2) => ({ error: String(e2) }));
-      console.error(`DIAG hex-mode terminalId=${terminalId} marker=${marker}`);
-      console.error(`DIAG screenshot=${JSON.stringify(shot)}`);
-      console.error(`DIAG process_status=${JSON.stringify(status)}`);
-      console.error(`DIAG sessions=${JSON.stringify(sessions)}`);
-      throw e;
-    }
+    await pollUntil(async () => {
+      const shot = await callToolExpectOk(request, mcpSessionId, 'get_screenshot', { terminal_id: terminalId });
+      return outputHasOwnLine(shot.content, marker) ? shot : null;
+    });
   });
 
   test('rejects a named key outside the tmux key-notation allowlist', async ({ request, mcpSessionId, terminalId }) => {

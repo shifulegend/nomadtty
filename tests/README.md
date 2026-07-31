@@ -154,10 +154,15 @@ step, a real mobile-UX responsiveness bug); three were test-side races/timeouts.
 **Resolved (2026-07-31):** the account-level GitHub Actions billing lock that had
 prevented any CI runner from ever being dispatched (see `docs/ai/decision-log.md`'s
 2026-07-30 "PR #8" entry) cleared, and the Playwright job's first genuine real-CI
-execution surfaced two more marginal-timing tests: `read_terminal_contents › mode=full
-returns the whole buffer` and `send_keystroke › hex mode: raw bytes reach the PTY`.
-Both passed in well under 1s in isolation and inside full local-suite runs (not a logic
-bug — checked before touching anything), but hit the shared 8s `pollUntil` default on
-GitHub's slower, shared 2-core runner. Given the test-scoped `{ timeout: 15000 }`
-pattern (matching `get_screenshot`'s existing cold-start test), not a shared-default
-change. See `docs/ai/mistakes.md` 2026-07-31-001.
+execution surfaced two more failing tests: `read_terminal_contents › mode=full returns
+the whole buffer` and `send_keystroke › hex mode: raw bytes reach the PTY`. An initial
+timeout bump (assuming CI-hardware latency) did NOT fix it — real CI diagnostics showed
+the actual cause: these 2 tests' markers (`full_mode_`/`hexsubmit_`, both exactly
+10-char prefixes) happened to make the echoed `echo ${marker}` command exactly 1
+character over GitHub's runner's 80-column pane width, hitting a bash/readline glitch
+at that exact wrap boundary where no newline is emitted before the real output —
+gluing it onto the input-echo line with nothing to distinguish it, which
+`outputHasOwnLine()` correctly refused to match at any timeout. Fixed by switching both
+tests' command to `printf '\n%s\n' ${marker}`, whose own leading newline is a real byte
+in the output, independent of exact column math. See `docs/ai/mistakes.md`
+2026-07-31-001 and -002 for the full investigation (including the wrong first fix).
