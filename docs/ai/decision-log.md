@@ -59,6 +59,23 @@
   turn triggered by the user's screenshot; both open decisions (PR vs. direct merge,
   publish job vs. docs-only fix) were confirmed by the user via `AskUserQuestion`.
 
+**Update (same day, after PR #8 opened)**: the PR's own fresh CI run
+(`30601786549`) confirmed this is **not a repo-content bug**. All 4 real jobs
+(Shellcheck, Docker build, nginx-config, Playwright) failed in ~3 seconds each,
+regardless of job content — and critically, `get_workflow_job` on any of them returned
+`"runner_id": 0`, `"runner_name": ""`, and **no `steps` array at all** (a job that
+actually executes any step, even the first `actions/checkout`, always has a populated
+`steps` array). This means no GitHub Actions runner was ever dispatched to any of these
+jobs — the workflow run record was created but nothing ever ran. Combined with the
+already-established finding that historical logs for `main`'s failing runs are
+unrecoverable (expired/purged), this points to an account- or repository-level GitHub
+Actions configuration issue (e.g., Actions disabled/restricted in repo settings, an
+exhausted spending limit, or a similar billing/policy block) — something only
+observable and fixable from the GitHub web UI by the repository owner, not from any
+read-only API available in this session. Reported to the user directly rather than
+continuing to guess via code changes; posted the same finding as a PR comment per the
+"own PRs get driven to green, or reply explaining why not" rule.
+
 ---
 
 ### [2026-07-30] Relicensed from MIT to PolyForm Shield 1.0.0
