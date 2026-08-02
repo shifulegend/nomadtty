@@ -69,6 +69,12 @@ Captured over 5G. Sensitive fields (server IP, session ID, URL, branch name) are
 
 ---
 
+
+
+> If you like my work or if it helped you, buy me a coffee or A100😉
+
+[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-red)](https://github.com/sponsors/shifulegend)
+
 ## Quick Install (Debian / Ubuntu) — one command
 
 ```bash
