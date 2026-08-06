@@ -16,7 +16,7 @@
 # "alpine has no ttyd apt package" was re-checked and found incorrect (or
 # outdated) when actually tested; see docs/ai/decision-log.md's 2026-07-30
 # entry for the size comparison (~4x smaller) and end-to-end verification.
-FROM alpine:3.20
+FROM alpine:3.24
 
 # ttyd/tmux: spawned per-session by the Node backend (server/session-manager.js).
 # nginx: reverse-proxies to the Session Manager. nodejs/npm: run the backend.
