@@ -130,9 +130,22 @@ function captureTail(tmuxName, n, { ansi = false } = {}) {
  * captureTail().
  */
 function captureViewport(tmuxName, { ansi = false, offsetFromBottom = 0 } = {}) {
-  const { height, cursorY } = getPaneInfo(tmuxName);
-  const end = cursorY - offsetFromBottom;
-  const start = end - height + 1;
+  const { height, cursorY, historySize } = getPaneInfo(tmuxName);
+  
+  if (offsetFromBottom === 0) {
+    // For a live/unscrolled viewport, the simplest and most accurate way to get
+    // exactly what is currently visible on the screen (the full geometric pane)
+    // is to capture without start/end anchors.
+    return capturePane(tmuxName, { ansi });
+  }
+  
+  // When scrolled back into history, offsetFromBottom is measured from the
+  // live bottom of the pane (which is essentially cursorY if we consider 
+  // cursorY as the bottom-most drawn line). But tmux row numbering treats 0
+  // as the top of the currently visible screen, and negative numbers as history.
+  // So if we scroll back `offsetFromBottom` lines:
+  const start = -offsetFromBottom;
+  const end = start + height - 1;
   return capturePane(tmuxName, { ansi, start, end });
 }
 

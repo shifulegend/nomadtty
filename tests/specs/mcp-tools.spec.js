@@ -52,12 +52,13 @@ async function runAndWaitForOutput(request, mcpSessionId, terminalId, text, outp
 }
 
 test.describe('MCP protocol', () => {
-  test('tools/list returns exactly the 10 documented tools with object schemas requiring terminal_id where expected', async ({ request, mcpSessionId }) => {
+  test('tools/list returns exactly the 11 documented tools with object schemas requiring terminal_id where expected', async ({ request, mcpSessionId }) => {
     const { messages } = await post(request, { sessionId: mcpSessionId, body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } });
     const tools = messages[0].result.tools;
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([
       'close_session', 'create_session', 'get_process_status', 'get_screenshot',
+      'get_screenshot_image',
       'list_active_ports', 'list_sessions', 'read_terminal_contents', 'scroll_buffer',
       'send_keystroke', 'type_command',
     ]);

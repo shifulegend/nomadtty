@@ -42,6 +42,19 @@
 - **Affected areas**: `tests/specs/mcp-tools.spec.js`, `tests/README.md`,
   `docs/ai/mistakes.md`, `docs/ai/decision-log.md`.
 
+### [2026-07-31] Split GHCR publish into its own workflow for a genuine dynamic badge
+- **Timestamp**: 2026-07-31 UTC
+- **Change**: Moved the `publish` job out of `.github/workflows/ci.yml` into a new
+  `.github/workflows/publish.yml`, triggered by `workflow_run` after the `CI` workflow
+  succeeds on `main`. README's third badge now points at GitHub's native
+  `actions/workflows/publish.yml/badge.svg` instead of the static shields.io badge added
+  earlier the same day — green now means the image was actually published, red means it
+  wasn't, with no third-party dependency.
+- **Affected areas**: `.github/workflows/ci.yml` (publish job removed),
+  `.github/workflows/publish.yml` (new), `README.md` (badge link). See
+  `docs/ai/decision-log.md`'s matching 2026-07-31 entry.
+- **Commit**: `41264eb`.
+
 ### [2026-07-31] Replaced dead ghcr-badge.egpl.dev Docker Image badge with a static shields.io badge
 - **Timestamp**: 2026-07-31 UTC
 - **Change**: README's third badge (`Docker Image`) pointed at

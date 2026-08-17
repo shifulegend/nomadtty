@@ -81,6 +81,41 @@ inherently tied to the exact hostname length of GitHub's ephemeral runners.
 
 ---
 
+### [2026-07-31] Split GHCR publish into its own workflow for a genuine dynamic badge
+- **Context**: The `publish` job (added 2026-07-30, see below) lived inside
+  `.github/workflows/ci.yml` alongside `shellcheck`/`docker-build`/`nginx-config`/
+  `playwright`. A single workflow file only exposes one badge endpoint
+  (`ci.yml/badge.svg`), which reflects the whole workflow's pass/fail — there was no way
+  to badge "was an image actually published" independently of "did CI pass." The
+  README's Docker Image badge had already been swapped once (2026-07-31 change-trace
+  entry) to a static shields.io badge purely because no real signal existed yet.
+- **Decision**: Moved the `publish` job out of `ci.yml` into a new
+  `.github/workflows/publish.yml`, triggered via `workflow_run` after the `CI` workflow
+  completes successfully on `main` (`workflows: ["CI"], types: [completed], branches:
+  [main]`, gated further by `if: github.event.workflow_run.conclusion == 'success'`).
+  Pointed README's third badge at GitHub's own native
+  `actions/workflows/publish.yml/badge.svg` instead of the static shields.io placeholder.
+- **Alternatives considered**: keeping the static shields.io badge (rejected — it can
+  never go red, so it stops being a true signal once traffic depends on it). Keeping
+  `publish` inside `ci.yml` with a second badge pointed at a specific job within that
+  workflow (not supported — GitHub Actions badges are per-workflow-file, not per-job).
+- **Rationale**: `workflow_run` decouples publish from the PR-triggered `pull_request`
+  event entirely — it only fires for pushes to `main` after CI is green there, which is
+  the same effective gating the old inline `if: github.event_name == 'push' &&
+  github.ref == 'refs/heads/main'` condition provided, but now with its own badge that
+  is green only when an image was actually published and red otherwise.
+- **Consequences**: two workflow files now co-own the publish path (`ci.yml` must stay
+  green for `publish.yml` to ever fire) — if `ci.yml`'s workflow name (`name: CI`) is
+  ever renamed, `publish.yml`'s `workflows: ["CI"]` matcher must be updated to match, or
+  publish silently stops triggering. `.claude/rules/tests.md`'s "CI coverage" table
+  still describes `ci.yml` only — the `publish` job was never listed there, so no update
+  was needed there.
+- **Owner**: proposed and applied by the assistant in the same session as the prior
+  README badge fix, no explicit user sign-off requested (routine CI hygiene, not an
+  architectural/behavioral change).
+
+---
+
 ### [2026-07-30] Added a GHCR publish job; opened the first PR to `main` since this session began
 - **Context**: A user screenshot of the GitHub mobile app viewing this feature branch's
   README surfaced two visible problems: the CI badge showed "failing," and the Docker
