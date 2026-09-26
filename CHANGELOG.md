@@ -24,6 +24,13 @@ and this project's version scheme follows [Semantic Versioning](https://semver.o
   original licenses. See `docs/ai/decision-log.md` for the full rationale.
 
 ### Fixed
+- **Critical**: `server/mcp/tmux.js`'s plain `tmux()` helper (backing `capture-pane`,
+  `display-message`, and every `send-keys` variant) had no timeout on its
+  `execFileSync` call. Because the backend is single-threaded across both HTTP
+  listeners (Session Manager + MCP, see `server/main.js`), a single hung tmux
+  subprocess against any one terminal session froze the entire process for every
+  client — including brand-new MCP connection attempts on the unrelated port.
+  Added a configurable bound (`MCP_TMUX_TIMEOUT_MS`, default 8000ms).
 - **Critical**: `install.sh` hard-crashed (`systemctl: command not found`, no
   fallback) on any host without systemd as PID 1 — a completely ordinary target
   for a one-command installer (containers, minimal cloud images). Found via a

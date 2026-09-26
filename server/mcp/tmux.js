@@ -18,8 +18,18 @@
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 
+/* Every call through this helper used to have no timeout at all: execFileSync
+ * blocks the entire single-threaded Node process until the child returns, and
+ * a hang here (not just in the copy-mode path below) freezes both HTTP
+ * listeners in server/main.js for every client, not just the caller. The
+ * copy-mode hang documented below was only ever confirmed for `send-keys`
+ * against a real attached client; capture-pane/display-message were never
+ * ruled OUT as sharing that risk, so they get the same bounded treatment
+ * rather than staying an unverified exception. */
+const TMUX_TIMEOUT_MS = parseInt(process.env.MCP_TMUX_TIMEOUT_MS || '8000', 10);
+
 function tmux(args) {
-  return execFileSync('tmux', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  return execFileSync('tmux', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: TMUX_TIMEOUT_MS });
 }
 
 /* Copy-mode commands (below) are driven from a fresh, one-shot `tmux <cmd>`
