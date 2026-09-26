@@ -3,6 +3,29 @@
 <!-- last updated: 2026-07-31 -->
 <!-- add an entry for every notable change: what, why, affected areas, commit -->
 
+### [2026-09-26] Bounded timeout on `server/mcp/tmux.js`'s plain `tmux()` subprocess calls
+- **Timestamp**: 2026-09-26 UTC
+- **Change**: `tmux()` (backing capture-pane/display-message/send-keys) now passes
+  `timeout: MCP_TMUX_TIMEOUT_MS` (default 8000ms) to `execFileSync`, matching the bound
+  already given to `tmuxBounded()`'s copy-mode-only path. Added `MCP_TMUX_TIMEOUT_MS` to
+  `.env.example`, `.claude/rules/config.md`, and `docs/ai/engineering-rules.md`.
+- **Why**: Live RCA of an MCP connectivity failure found the real cause was this
+  unbounded call freezing the entire single-threaded backend (both the Session Manager
+  and MCP HTTP listeners) whenever any one tmux subprocess hung — see
+  `docs/ai/mistakes.md` [2026-09-26-001] and `docs/ai/decision-log.md`'s matching entry.
+- **Affected areas**: `server/mcp/tmux.js`, `.env.example`, `.claude/rules/config.md`,
+  `docs/ai/engineering-rules.md`, `CHANGELOG.md`.
+- **Verification**: Full Playwright suite run twice. First run (host under heavy
+  concurrent load, `uptime` load average 7.6–9.9 on 2 cores) showed 10 failures, all
+  `page.waitForURL` navigation timeouts unrelated to `tmux.js`; a clean rerun after load
+  dropped gave 62/63, with only `android-mobile-ux.spec.js`'s "toolbar buttons ignore
+  drag/scroll gestures..." failing. Verified that failure is pre-existing and unrelated:
+  `git stash`'d this change back to the base commit (`a605234`, itself titled "chore:
+  retry flaky android mobile ux test") and the same test failed identically 3/3 times
+  with retries, with none of this change present. 63/63 achievable is blocked only by
+  that already-known, already-tracked flake — not by this fix.
+- **Commit**: (recorded after commit is made)
+
 ### [2026-07-31] Corrected fix for the 2 CI-only mcp-tools.spec.js failures: a bash/readline line-wrap glitch, not slow CI hardware
 - **Timestamp**: 2026-07-31 UTC
 - **Change**: The previous `{ timeout: 15000 }` fix (below) was wrong — pushed via a

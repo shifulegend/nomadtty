@@ -15,6 +15,39 @@
 
 ---
 
+### [2026-09-26] Bound every plain `tmux()` subprocess call with a configurable timeout
+- **Context**: RCA on a live MCP connectivity failure (tool schemas loaded, but real
+  tool calls and even other clients' handshakes timed out intermittently) traced to
+  `server/mcp/tmux.js`'s `tmux()` helper calling `execFileSync` with no timeout, on a
+  backend that runs both the Session Manager and MCP HTTP listeners single-threaded in
+  one process (`server/main.js`). See `docs/ai/mistakes.md` [2026-09-26-001] for the
+  full trace, and [2026-07-29-024] for the sibling hang this left unresolved for.
+- **Decision**: Added `MCP_TMUX_TIMEOUT_MS` (default `8000`) and applied it to `tmux()`'s
+  `execFileSync` call, so every capture-pane/display-message/send-keys invocation through
+  that helper is bounded, not just the copy-mode path `tmuxBounded()` already covered.
+- **Alternatives considered**: (a) Move tmux subprocess calls off the main thread
+  entirely (worker threads or a child process pool) — rejected as disproportionate to the
+  actual failure mode and a much larger architectural change than the bug warranted;
+  worth revisiting if bounded timeouts prove insufficient in practice. (b) Only fix the
+  specific call site involved in the observed incident — rejected because
+  [2026-07-29-024] already flagged the same unbounded-hang risk for other tmux
+  subcommands without closing it, and leaving some calls through the same helper
+  unbounded would just relocate the same class of failure.
+- **Rationale**: A timeout turns a whole-process freeze affecting every client into a
+  single failed tool call surfaced as a normal `isError` MCP result (`tools.js`'s
+  `guarded()` already handles this) — the minimal change that closes the actual gap,
+  consistent with the "no hardcoding" rule (config.md) by making the bound an env var
+  rather than a literal.
+- **Consequences**: Any tmux operation that genuinely needs more than 8s (unlikely for
+  this project's per-call primitives) would now fail instead of eventually succeeding —
+  acceptable since `MCP_TMUX_TIMEOUT_MS` is operator-configurable if a real deployment
+  needs headroom. Does not address *why* a tmux call might hang in the first place
+  (that remains tracked as an open, not-fully-characterized tmux/pty interaction in
+  [2026-07-29-024]) — this is a containment fix, not a root-cause-in-tmux-itself fix.
+- **Owner**: claude (live RCA + fix, user-authorized)
+
+---
+
 ### [2026-07-31] CI is genuinely green end-to-end for the first time; fixed the 2 real failures its first real run surfaced
 - **Context**: User asked to "fix all CI failing issues with proper RCA." The
   2026-07-30 diagnosis on file was that CI was blocked at the account/repo level (no

@@ -33,6 +33,7 @@
 | `MCP_DENYLIST_ENABLED` | `1` (on) | `server/mcp/validation.js` — best-effort `type_command` destructive-pattern guard |
 | `MCP_DENYLIST_EXTRA` | *(none)* | `server/mcp/validation.js` — comma-separated extra regex sources |
 | `MCP_FOLLOW_MAX_SECONDS` | `30` | `server/mcp/tools.js` — max duration of `read_terminal_contents`'s `follow` streaming mode |
+| `MCP_TMUX_TIMEOUT_MS` | `8000` | `server/mcp/tmux.js` — per-call timeout for every `tmux` subprocess invoked via the plain `tmux()` helper (capture-pane, display-message, send-keys); this process is single-threaded across both HTTP listeners, so an unbounded hang here freezes every client, not just the caller — see decision-log.md's 2026-09-26 entry |
 | `SESSION_MANAGER_SCROLL_LINES_MAX` | `200` | `server/session-manager.js` — caps a single `/api/sessions/:id/copy-scroll` request's line count (hygiene, not a security boundary — this API is loopback-only) |
 | `SESSION_MANAGER_START_DIR` | deploy user's home dir (`os.homedir()`) | `server/session-manager.js` — working directory a brand-new tmux session's shell starts in (`tmux new-session -c`); falls back to the repo root if the configured/default directory doesn't exist |
 

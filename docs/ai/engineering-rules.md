@@ -39,8 +39,9 @@
   4200), `MCP_HOST` (default `0.0.0.0`), `MCP_AUTH_TOKEN` (no default — see
   Security section), `MCP_ALLOW_INSECURE`, `MCP_MAX_TEXT_BYTES`, `MCP_MAX_LABEL_BYTES`,
   `MCP_MAX_KEYS_PER_CALL`, `MCP_MAX_LINES_REQUEST`, `MCP_MAX_CAPTURE_LINES`,
-  `MCP_DENYLIST_ENABLED`, `MCP_DENYLIST_EXTRA`, `MCP_FOLLOW_MAX_SECONDS`. See
-  `server/mcp/validation.js`, `server/mcp/auth.js`, `server/mcp/tools.js`.
+  `MCP_DENYLIST_ENABLED`, `MCP_DENYLIST_EXTRA`, `MCP_FOLLOW_MAX_SECONDS`,
+  `MCP_TMUX_TIMEOUT_MS`. See `server/mcp/validation.js`, `server/mcp/auth.js`,
+  `server/mcp/tools.js`, `server/mcp/tmux.js`.
 
 ## Code Organisation Expectations
 - `src/kb.js` must remain a **single IIFE** with no external dependencies.
