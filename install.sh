@@ -27,6 +27,7 @@
 #   MCP_AUTH_TOKEN        bearer token required to call the MCP server
 #                         (default: auto-generated with `openssl rand -hex 32`
 #                         and preserved across re-runs)
+#   NOMADTTY_PORT        public nginx port for the web UI (default: 45123)
 #   MCP_PORT              MCP server port (default: 4200)
 #   MCP_HOST              MCP server bind address (default: 0.0.0.0 — LAN-facing;
 #                         set 127.0.0.1 for local-only access)
@@ -71,6 +72,7 @@ Options are environment variables, e.g.:
   NOMADTTY_REPO_URL      git remote to clone from
   NOMADTTY_LOCAL_SOURCE  install from a local checkout instead of cloning
   MCP_AUTH_TOKEN         MCP bearer token (default: auto-generated, preserved)
+  NOMADTTY_PORT          public nginx port for the web UI (default: 45123)
   MCP_PORT               MCP server port (default: 4200)
   MCP_HOST               MCP server bind address (default: 0.0.0.0)
   SESSION_MANAGER_PORT   Session Manager port (default: 4000)
@@ -117,6 +119,7 @@ STORED_NOMADTTY_USER="$(_stored NOMADTTY_USER)"
 STORED_NOMADTTY_TLS="$(_stored NOMADTTY_TLS)"
 STORED_NOMADTTY_TLS_EMAIL="$(_stored NOMADTTY_TLS_EMAIL)"
 STORED_NOMADTTY_BASIC_AUTH="$(_stored NOMADTTY_BASIC_AUTH)"
+STORED_NOMADTTY_PORT="$(_stored NOMADTTY_PORT)"
 
 NOMADTTY_HOST="${NOMADTTY_HOST:-${STORED_NOMADTTY_HOST:-}}"
 NOMADTTY_USER="${NOMADTTY_USER:-${STORED_NOMADTTY_USER:-${SUDO_USER:-$(id -un)}}}"
@@ -124,6 +127,7 @@ INSTALL_DIR="${NOMADTTY_INSTALL_DIR:-/opt/nomadtty}"
 BRANCH="${NOMADTTY_BRANCH:-main}"
 REPO_URL="${NOMADTTY_REPO_URL:-https://github.com/shifulegend/nomadtty.git}"
 LOCAL_SOURCE="${NOMADTTY_LOCAL_SOURCE:-}"
+NOMADTTY_PORT="${NOMADTTY_PORT:-${STORED_NOMADTTY_PORT:-45123}}"
 MCP_PORT="${MCP_PORT:-4200}"
 MCP_HOST="${MCP_HOST:-0.0.0.0}"
 SESSION_MANAGER_PORT="${SESSION_MANAGER_PORT:-4000}"
@@ -145,6 +149,12 @@ if [ -n "$NOMADTTY_HOST" ]; then
     fi
 fi
 
+# ── Validate NOMADTTY_PORT ──────────────────────────────────────────────────
+if ! echo "$NOMADTTY_PORT" | grep -qE '^[0-9]+$' || [ "$NOMADTTY_PORT" -lt 1 ] || [ "$NOMADTTY_PORT" -gt 65535 ]; then
+    echo "ERROR: NOMADTTY_PORT='$NOMADTTY_PORT' is not a valid port (1-65535)." >&2
+    exit 1
+fi
+
 # ── Validate the deploy user exists ─────────────────────────────────────────
 if ! id "$NOMADTTY_USER" >/dev/null 2>&1; then
     echo "ERROR: NOMADTTY_USER='$NOMADTTY_USER' does not exist on this system." >&2
@@ -161,6 +171,11 @@ if [ "$NOMADTTY_TLS" = "certbot" ]; then
     if [ -z "$NOMADTTY_HOST" ]; then
         echo "ERROR: NOMADTTY_TLS=certbot requires NOMADTTY_HOST to be set to a" >&2
         echo "       real, publicly-resolvable domain pointing at this host." >&2
+        exit 1
+    fi
+    if [ "$NOMADTTY_PORT" != "80" ]; then
+        echo "ERROR: NOMADTTY_TLS=certbot needs nginx on port 80 for the Let's" >&2
+        echo "       Encrypt HTTP-01 challenge — set NOMADTTY_PORT=80." >&2
         exit 1
     fi
     if [ -z "$NOMADTTY_TLS_EMAIL" ]; then
@@ -195,6 +210,7 @@ echo "    Install directory: $INSTALL_DIR"
 echo "    Session Manager   : 127.0.0.1:$SESSION_MANAGER_PORT (loopback only)"
 echo "    MCP server        : $MCP_HOST:$MCP_PORT"
 echo "    nginx host        : ${NOMADTTY_HOST:-_ (any hostname)}"
+echo "    nginx port        : $NOMADTTY_PORT"
 echo "    TLS               : $NOMADTTY_TLS"
 echo "    Basic Auth        : $([ -n "$NOMADTTY_BASIC_AUTH" ] && echo enabled || echo disabled)"
 if [ "$HAS_SYSTEMD" = "1" ]; then
@@ -245,6 +261,8 @@ chown -R "$NOMADTTY_USER" "$INSTALL_DIR"
 # ── Configure nginx ─────────────────────────────────────────────────────────
 echo "==> Configuring nginx..."
 cp "$INSTALL_DIR/nginx/ttyd.conf" "$NGINX_CONF"
+sed -i "s/^\(\s*listen\s\+\)80;/\1$NOMADTTY_PORT;/" "$NGINX_CONF"
+sed -i "s#127\.0\.0\.1:4000#127.0.0.1:$SESSION_MANAGER_PORT#" "$NGINX_CONF"
 
 if [ -n "$NOMADTTY_HOST" ]; then
     sed -i "s/terminal\.yourdomain\.com/$NOMADTTY_HOST/" "$NGINX_CONF"
@@ -296,6 +314,7 @@ MCP_AUTH_TOKEN=$MCP_AUTH_TOKEN
 MCP_PORT=$MCP_PORT
 MCP_HOST=$MCP_HOST
 SESSION_MANAGER_PORT=$SESSION_MANAGER_PORT
+NOMADTTY_PORT=$NOMADTTY_PORT
 # install.sh-only settings, persisted here so a bare re-run (no env vars)
 # repeats this configuration instead of resetting it — see .claude/rules/config.md.
 NOMADTTY_HOST=$NOMADTTY_HOST
@@ -396,14 +415,14 @@ sleep 2   # give the backend a moment to start
 # `-w "%{http_code}"` already prints "000" on its own when no response code
 # was received, so appending another literal here would double it up.
 if [ -n "$NOMADTTY_BASIC_AUTH" ]; then
-    HTTP_STATUS="$(curl -s -o /dev/null -w "%{http_code}" -u "$NOMADTTY_BASIC_AUTH" "http://127.0.0.1/" || true)"
+    HTTP_STATUS="$(curl -s -o /dev/null -w "%{http_code}" -u "$NOMADTTY_BASIC_AUTH" "http://127.0.0.1:$NOMADTTY_PORT/" || true)"
 else
-    HTTP_STATUS="$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1/" || true)"
+    HTTP_STATUS="$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$NOMADTTY_PORT/" || true)"
 fi
 if [ "$HTTP_STATUS" = "200" ]; then
     echo "    HTTP 200 OK — Session Manager is responding."
 else
-    echo "    WARNING: Got HTTP $HTTP_STATUS from http://127.0.0.1/ — check logs." >&2
+    echo "    WARNING: Got HTTP $HTTP_STATUS from http://127.0.0.1:$NOMADTTY_PORT/ — check logs." >&2
     echo "    journalctl -u nomadtty -n 20" >&2
     echo "    tail /var/log/nginx/nomadtty.error.log" >&2
 fi
@@ -412,12 +431,14 @@ fi
 echo ""
 echo "✓  NomadTTY installed and running."
 echo ""
+PORT_SUFFIX=""
+[ "$NOMADTTY_PORT" != "80" ] && PORT_SUFFIX=":$NOMADTTY_PORT"
 if [ "$NOMADTTY_TLS" = "certbot" ] && [ "$TLS_STATUS" != "${TLS_STATUS#enabled}" ]; then
     echo "   Open:  https://$NOMADTTY_HOST"
 elif [ -n "$NOMADTTY_HOST" ]; then
-    echo "   Open:  http://$NOMADTTY_HOST"
+    echo "   Open:  http://$NOMADTTY_HOST$PORT_SUFFIX"
 else
-    echo "   Open:  http://$LOCAL_IP"
+    echo "   Open:  http://$LOCAL_IP$PORT_SUFFIX"
 fi
 echo "   TLS:   $TLS_STATUS"
 if [ -n "$NOMADTTY_BASIC_AUTH" ]; then

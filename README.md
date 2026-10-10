@@ -102,7 +102,7 @@ At the end you will see:
 ```
 ✓  NomadTTY installed and running.
 
-   Open:  http://192.168.1.x
+   Open:  http://192.168.1.x:45123
 
    MCP_AUTH_TOKEN (newly generated, stored in /etc/nomadtty/nomadtty.env, chmod 600):
      <64 hex chars>
@@ -119,6 +119,7 @@ All options are env vars — no config file to hand-edit before install:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NOMADTTY_HOST` | _(any)_ | Set your domain as nginx `server_name`, e.g. `terminal.example.com` |
+| `NOMADTTY_PORT` | `45123` | Public nginx port for the web UI (persisted across re-runs). Must be `80` when using `NOMADTTY_TLS=certbot` |
 | `NOMADTTY_USER` | current sudo user | OS user that runs the backend — must own the tools you want available in the shell |
 | `NOMADTTY_INSTALL_DIR` | `/opt/nomadtty` | Where the application code is installed |
 | `NOMADTTY_BRANCH` | `main` | Git branch/tag to install |
