@@ -5,6 +5,48 @@
 
 ---
 
+### [2026-09-26-001] Unbounded `execFileSync` in `tmux.js`'s plain `tmux()` helper could freeze the entire backend, for every client, on every port
+- **Timestamp**: 2026-09-26 UTC
+- **Summary**: Diagnosing a live production symptom (an MCP client saw its tool schemas
+  load fine but every actual tool call time out, and the connection flapped between
+  "connected" and dead) traced to `server/mcp/tmux.js`'s `tmux()` helper — the one
+  backing `capturePane`/`getPaneInfo`/`sendLiteral`/`sendEnter`/`sendNamedKeys`/
+  `sendHexKeys` — calling `execFileSync` with **no timeout**. `server/main.js` runs the
+  Session Manager and MCP server as two `http.createServer` listeners in one process,
+  sharing one event loop; `execFileSync` blocks that entire process until the child
+  returns. Only the copy-mode-specific path (`tmuxBounded`, 2000ms) had ever been given
+  a bound, following [2026-07-29-024]'s finding that `send-keys` against a real attached
+  client in copy-mode can hang indefinitely — but that entry explicitly left open whether
+  `capture-pane`/`display-message` shared the same risk ("not fully characterized...
+  independently confirmed"). With 7 tmux/ttyd session pairs alive on the affected host,
+  several days to two weeks old, any one of them hitting that unconfirmed-but-not-ruled-
+  out hang class would freeze both listeners for every client, not just the one acting on
+  that session — exactly matching the observed symptom (schema discovery needs no tmux
+  call and succeeds; any real tool call, or an unrelated new client's handshake, can stall
+  indefinitely).
+- **Root cause**: `tmux()` (`server/mcp/tmux.js`) had no `timeout` option on its
+  `execFileSync` call, unlike `tmuxBounded()`'s deliberate 2000ms bound for copy-mode
+  ops — an inconsistency the code's own comments already flagged as an open risk without
+  actually closing it.
+- **Affected files**: `server/mcp/tmux.js`.
+- **Detection method**: Live RCA on a running instance — checked process/port state (alive,
+  listening), then a direct `curl` to `/mcp` that took ~6s for a trivial 401 (evidence of
+  contention, not a dead process), then read `tmux.js`/`auth.js`/`session-manager.js`/
+  `mcp/index.js` end-to-end to confirm the single-process/single-event-loop architecture,
+  then cross-referenced `mistakes.md` [2026-07-29-024] which had already identified the
+  same class of risk for a sibling code path without closing it for this one.
+- **Correction**: Added `MCP_TMUX_TIMEOUT_MS` (default 8000ms, matching this project's
+  existing "shared 8s" timing convention — see the 2026-07-31 CI entries) and applied it
+  to `tmux()`'s `execFileSync` call. A hung tmux subprocess now fails that one tool call
+  (surfaced as a normal `isError` MCP result via `tools.js`'s `guarded()` wrapper) instead
+  of freezing the whole backend. Verified via the full Playwright suite (63/63).
+- **Prevention rule**: Every synchronous subprocess call on a single-threaded Node
+  backend needs an explicit timeout by default, not just the specific call site where a
+  hang was empirically reproduced — "not yet confirmed to hang" is not the same as "safe,"
+  especially once a sibling code path has already demonstrated the failure class is real.
+
+---
+
 ### [2026-07-31-002] The real cause of the 2 CI-only mcp-tools.spec.js failures: a bash/readline line-wrap glitch at an exact 80-column boundary, not slow hardware
 - **Timestamp**: 2026-07-31 UTC
 - **Summary**: 2026-07-31-001's `{ timeout: 15000 }` fix was wrong (see that entry's

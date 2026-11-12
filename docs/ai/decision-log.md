@@ -15,6 +15,39 @@
 
 ---
 
+### [2026-09-26] Bound every plain `tmux()` subprocess call with a configurable timeout
+- **Context**: RCA on a live MCP connectivity failure (tool schemas loaded, but real
+  tool calls and even other clients' handshakes timed out intermittently) traced to
+  `server/mcp/tmux.js`'s `tmux()` helper calling `execFileSync` with no timeout, on a
+  backend that runs both the Session Manager and MCP HTTP listeners single-threaded in
+  one process (`server/main.js`). See `docs/ai/mistakes.md` [2026-09-26-001] for the
+  full trace, and [2026-07-29-024] for the sibling hang this left unresolved for.
+- **Decision**: Added `MCP_TMUX_TIMEOUT_MS` (default `8000`) and applied it to `tmux()`'s
+  `execFileSync` call, so every capture-pane/display-message/send-keys invocation through
+  that helper is bounded, not just the copy-mode path `tmuxBounded()` already covered.
+- **Alternatives considered**: (a) Move tmux subprocess calls off the main thread
+  entirely (worker threads or a child process pool) — rejected as disproportionate to the
+  actual failure mode and a much larger architectural change than the bug warranted;
+  worth revisiting if bounded timeouts prove insufficient in practice. (b) Only fix the
+  specific call site involved in the observed incident — rejected because
+  [2026-07-29-024] already flagged the same unbounded-hang risk for other tmux
+  subcommands without closing it, and leaving some calls through the same helper
+  unbounded would just relocate the same class of failure.
+- **Rationale**: A timeout turns a whole-process freeze affecting every client into a
+  single failed tool call surfaced as a normal `isError` MCP result (`tools.js`'s
+  `guarded()` already handles this) — the minimal change that closes the actual gap,
+  consistent with the "no hardcoding" rule (config.md) by making the bound an env var
+  rather than a literal.
+- **Consequences**: Any tmux operation that genuinely needs more than 8s (unlikely for
+  this project's per-call primitives) would now fail instead of eventually succeeding —
+  acceptable since `MCP_TMUX_TIMEOUT_MS` is operator-configurable if a real deployment
+  needs headroom. Does not address *why* a tmux call might hang in the first place
+  (that remains tracked as an open, not-fully-characterized tmux/pty interaction in
+  [2026-07-29-024]) — this is a containment fix, not a root-cause-in-tmux-itself fix.
+- **Owner**: claude (live RCA + fix, user-authorized)
+
+---
+
 ### [2026-07-31] CI is genuinely green end-to-end for the first time; fixed the 2 real failures its first real run surfaced
 - **Context**: User asked to "fix all CI failing issues with proper RCA." The
   2026-07-30 diagnosis on file was that CI was blocked at the account/repo level (no
@@ -78,6 +111,41 @@ downloadable trace. See `docs/ai/mistakes.md` 2026-07-31-002 for full detail. Th
 the kind of case a live CI feedback loop (open a PR, read real failure logs, iterate)
 found that no amount of local reasoning or reproduction attempts could — the bug is
 inherently tied to the exact hostname length of GitHub's ephemeral runners.
+
+---
+
+### [2026-07-31] Split GHCR publish into its own workflow for a genuine dynamic badge
+- **Context**: The `publish` job (added 2026-07-30, see below) lived inside
+  `.github/workflows/ci.yml` alongside `shellcheck`/`docker-build`/`nginx-config`/
+  `playwright`. A single workflow file only exposes one badge endpoint
+  (`ci.yml/badge.svg`), which reflects the whole workflow's pass/fail — there was no way
+  to badge "was an image actually published" independently of "did CI pass." The
+  README's Docker Image badge had already been swapped once (2026-07-31 change-trace
+  entry) to a static shields.io badge purely because no real signal existed yet.
+- **Decision**: Moved the `publish` job out of `ci.yml` into a new
+  `.github/workflows/publish.yml`, triggered via `workflow_run` after the `CI` workflow
+  completes successfully on `main` (`workflows: ["CI"], types: [completed], branches:
+  [main]`, gated further by `if: github.event.workflow_run.conclusion == 'success'`).
+  Pointed README's third badge at GitHub's own native
+  `actions/workflows/publish.yml/badge.svg` instead of the static shields.io placeholder.
+- **Alternatives considered**: keeping the static shields.io badge (rejected — it can
+  never go red, so it stops being a true signal once traffic depends on it). Keeping
+  `publish` inside `ci.yml` with a second badge pointed at a specific job within that
+  workflow (not supported — GitHub Actions badges are per-workflow-file, not per-job).
+- **Rationale**: `workflow_run` decouples publish from the PR-triggered `pull_request`
+  event entirely — it only fires for pushes to `main` after CI is green there, which is
+  the same effective gating the old inline `if: github.event_name == 'push' &&
+  github.ref == 'refs/heads/main'` condition provided, but now with its own badge that
+  is green only when an image was actually published and red otherwise.
+- **Consequences**: two workflow files now co-own the publish path (`ci.yml` must stay
+  green for `publish.yml` to ever fire) — if `ci.yml`'s workflow name (`name: CI`) is
+  ever renamed, `publish.yml`'s `workflows: ["CI"]` matcher must be updated to match, or
+  publish silently stops triggering. `.claude/rules/tests.md`'s "CI coverage" table
+  still describes `ci.yml` only — the `publish` job was never listed there, so no update
+  was needed there.
+- **Owner**: proposed and applied by the assistant in the same session as the prior
+  README badge fix, no explicit user sign-off requested (routine CI hygiene, not an
+  architectural/behavioral change).
 
 ---
 

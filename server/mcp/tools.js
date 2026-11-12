@@ -51,6 +51,59 @@ const scrollOffsets = new Map();
 
 function registerTools(server, { sessions, spawnSession, closeSession, listSessions }) {
   server.registerTool(
+    'get_screenshot_image',
+    {
+      title: 'Get terminal screenshot as an image (PNG)',
+      description:
+        "Captures the current visual state of a terminal's viewport, renders the text and ANSI colors into an HTML document, and converts it to a PNG image which is returned as a base64 string.",
+      inputSchema: {
+        terminal_id: z.string().describe('The session id, as returned by the Session Manager (12 hex chars).'),
+      },
+    },
+    guarded(async ({ terminal_id }) => {
+      const entry = requireTerminalId(sessions, terminal_id);
+      const info = tmux.getPaneInfo(entry.tmuxName);
+      const offset = scrollOffsets.get(terminal_id) || 0;
+      const content = tmux.captureViewport(entry.tmuxName, { ansi: true, offsetFromBottom: offset });
+      
+      const tmpHtml = `/tmp/nomadtty_${terminal_id}_screenshot.html`;
+      const tmpPng = `/tmp/nomadtty_${terminal_id}_screenshot.png`;
+      const { execFileSync } = require('child_process');
+      const fs = require('fs');
+      
+      // Convert ANSI to HTML using aha
+      let htmlContent;
+      try {
+        htmlContent = execFileSync('aha', ['--black'], { input: content, encoding: 'utf8' });
+      } catch (err) {
+        // Fallback or handle error
+        htmlContent = `<pre style="color: white; background-color: black;">${content}</pre>`;
+      }
+      
+      // Set a larger font for better readability in the screenshot image
+      htmlContent = htmlContent.replace('<pre>', '<pre style="font-size: 16px; font-family: monospace;">');
+      
+      fs.writeFileSync(tmpHtml, htmlContent);
+      
+      // Convert HTML to PNG using wkhtmltoimage
+      try {
+        // Assuming ~8px width per character, 18px height
+        const width = Math.max(800, info.width * 10); 
+        execFileSync('wkhtmltoimage', ['--width', String(width), tmpHtml, tmpPng], { stdio: 'ignore' });
+        
+        const base64Png = fs.readFileSync(tmpPng, 'base64');
+        return { content: [{ type: 'image', data: base64Png, mimeType: 'image/png' }] };
+      } catch (err) {
+        throw new Error(`Failed to generate image: ${err.message}`);
+      } finally {
+        // Cleanup
+        if (fs.existsSync(tmpHtml)) fs.unlinkSync(tmpHtml);
+        if (fs.existsSync(tmpPng)) fs.unlinkSync(tmpPng);
+      }
+    })
+  );
+
+  server.registerTool(
     'get_screenshot',
     {
       title: 'Get terminal screenshot',
