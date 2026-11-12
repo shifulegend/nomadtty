@@ -14,6 +14,10 @@ and this project's version scheme follows [Semantic Versioning](https://semver.o
   instructions, which referenced an image that had never actually existed.
 
 ### Changed
+- `install.sh` now serves the web UI on port **45123** by default instead of 80, via a
+  new persisted `NOMADTTY_PORT` option. `SESSION_MANAGER_PORT` is now also applied to the
+  nginx upstream. `NOMADTTY_TLS=certbot` requires `NOMADTTY_PORT=80`. The Docker image is
+  unchanged (still port 80).
 - **Breaking (licensing)**: NomadTTY is now licensed under [PolyForm Shield
   1.0.0](https://polyformproject.org/licenses/shield/1.0.0) instead of MIT —
   free for any use, including at a company, except building a competing
